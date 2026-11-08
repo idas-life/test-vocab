@@ -1,0 +1,43 @@
+{
+ "_說明": "rankXp 是每一階稱號需要的分數（第 1 個一定是 0）；稱號名稱寫在 chars.json 每位角色的 ranks。角色沒寫 ranks 時才用這裡的 ranks。每天認真做完功課大約 400–900 分。packs 是字庫清單：locked 的字庫要輸入兌換碼才看得到，檔案用 tools/lock-pack.mjs 加密產生。firebase 留 null 就是只存在手機；要開雲端同步，照 README 把 Firebase 設定貼進來。",
+ "rankXp": [
+  0,
+  500,
+  1500,
+  3000,
+  5000,
+  8000,
+  12000,
+  17000,
+  23000,
+  30000
+ ],
+ "ranks": [
+  {
+   "name": "小蛋糕",
+   "xp": 0
+  },
+  {
+   "name": "小蘋果",
+   "xp": 2000
+  },
+  {
+   "name": "寶貝妹妹",
+   "xp": 8000
+  }
+ ],
+ "packs": [
+  {
+   "id": "gsat",
+   "name": "學測 6000",
+   "levels": []
+  },
+  {
+   "id": "toefl",
+   "name": "托福綠寶書",
+   "file": "packs/toefl.lock.json",
+   "locked": true
+  }
+ ],
+ "firebase": null
+}

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>學測金榜</title>
+<meta name="theme-color" content="#FBF4E4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="學測金榜">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="description" content="學測英文單字練習：大考中心參考詞彙表 1–6 級">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
+<link rel="stylesheet" href="style.css?v=9">
+</head>
+<body>
+<div class="wrap">
+  <div class="bunting" id="bunting" aria-hidden="true"></div>
+  <header class="top">
+    <div class="plaque" id="plaque" role="img" aria-label="目前稱號"></div>
+    <div class="stats">
+      <p class="xp"><b id="xp">0</b>分</p>
+      <div class="bar" id="bar" role="progressbar" aria-label="距離下一個名次" aria-valuemin="0" aria-valuemax="100"><span id="barFill"></span></div>
+      <p class="next" id="nextRank"></p>
+      <p class="streak" id="streakLine"></p>
+      <ol class="week" id="week" aria-label="最近七天"></ol>
+    </div>
+  </header>
+  <p class="countdown" id="countdown"></p>
+
+  <main>
+    <section id="view-load"><p class="hint">正在載入字庫……</p></section>
+    <section id="view-today" hidden></section>
+    <section id="view-drill" hidden></section>
+
+    <section id="view-lib" hidden>
+      <h2>字庫</h2>
+      <p class="counts" id="counts"></p>
+      <label class="vh" for="q">搜尋字庫</label>
+      <input id="q" class="field" type="search" placeholder="搜尋英文或中文" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="seg" role="group" aria-label="級數" id="fLv">
+        <button type="button" data-v="all" aria-pressed="true">全部</button>
+        <button type="button" data-v="1" aria-pressed="false">1 級</button>
+        <button type="button" data-v="2" aria-pressed="false">2 級</button>
+        <button type="button" data-v="3" aria-pressed="false">3 級</button>
+        <button type="button" data-v="4" aria-pressed="false">4 級</button>
+        <button type="button" data-v="5" aria-pressed="false">5 級</button>
+        <button type="button" data-v="6" aria-pressed="false">6 級</button>
+        <button type="button" data-v="M" aria-pressed="false">自訂</button>
+      </div>
+      <div class="seg" role="group" aria-label="進度" id="fStatus">
+        <button type="button" data-v="all" aria-pressed="true">全部</button>
+        <button type="button" data-v="0" aria-pressed="false">未學</button>
+        <button type="button" data-v="1" aria-pressed="false">學習中</button>
+        <button type="button" data-v="2" aria-pressed="false">熟記</button>
+        <button type="button" data-v="weak" aria-pressed="false">常錯</button>
+      </div>
+      <ul class="list" id="list"></ul>
+      <div class="libmore" id="libMore"></div>
+      <p class="empty" id="listEmpty" hidden>沒有符合的字。換個關鍵字或篩選試試。</p>
+
+      <details class="add">
+        <summary>加入自己的字</summary>
+        <div class="addform" id="addForm">
+          <label>英文單字<input name="w" class="field" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <label>中文意思<input name="zh" class="field" autocomplete="off"></label>
+          <label>詞性（選填）<input name="pos" class="field" placeholder="例如 adj." autocomplete="off"></label>
+          <label>例句（選填）<input name="ex" class="field" autocomplete="off"></label>
+          <p class="form-msg" id="addMsg" aria-live="polite"></p>
+          <div><button class="btn primary" type="button" id="addBtn">加入字庫</button></div>
+        </div>
+      </details>
+      <p class="hint credit">字表：大學入學考試中心《高中英文參考詞彙表（111 學年度起適用）》。中文釋義整理自 ECDICT（MIT 授權），可能有不夠精準的地方。</p>
+    </section>
+
+    <section id="view-log" hidden></section>
+
+    <section id="view-set" hidden>
+      <h2>設定</h2>
+      <div class="group" id="packGroup">
+        <h3>字庫</h3>
+        <div class="seg" role="group" aria-label="切換字庫" id="sPack"></div>
+        <p class="hint">有兌換碼的話，輸入後可以解鎖其他字庫。</p>
+        <div class="spell"><label class="vh" for="redeemIn">兌換碼</label><input id="redeemIn" class="field" lang="en" placeholder="輸入兌換碼" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          <button class="btn small" type="button" id="redeemBtn">兌換</button></div>
+        <p class="hint" id="redeemMsg" aria-live="polite"></p>
+        <div id="packStart" hidden></div>
+      </div>
+      <div class="group" id="startGroup">
+        <h3>從第幾級開始</h3>
+        <div class="seg" role="group" aria-label="起始級數" id="sStart">
+          <button type="button" data-v="1">1</button><button type="button" data-v="2">2</button>
+          <button type="button" data-v="3">3</button><button type="button" data-v="4">4</button>
+          <button type="button" data-v="5">5</button><button type="button" data-v="6">6</button>
+        </div>
+        <p class="hint" id="startHint"></p>
+        <p><button class="btn small" type="button" id="retestBtn">重新做程度測驗</button></p>
+      </div>
+      <div class="group">
+        <h3>每天幾個新字</h3>
+        <div class="seg" role="group" aria-label="每天新字數" id="sDaily">
+          <button type="button" data-v="10">10</button>
+          <button type="button" data-v="20">20</button>
+          <button type="button" data-v="30">30</button>
+          <button type="button" data-v="40">40</button>
+          <button type="button" data-v="50">50</button>
+          <button type="button" data-v="60">60</button>
+        </div>
+        <p class="hint" id="dailyHint"></p>
+      </div>
+      <div class="group" id="charGroup">
+        <h3>陪讀角色</h3>
+        <div class="seg" role="group" aria-label="陪讀角色" id="sChar"></div>
+      </div>
+      <div class="group">
+        <h3>發音</h3>
+        <div class="seg" role="group" aria-label="發音方式" id="sSay">
+          <button type="button" data-v="off">按了才唸</button>
+          <button type="button" data-v="on">翻到英文字就唸</button>
+        </div>
+        <p class="hint" id="sayHint"></p>
+      </div>
+      <div class="group">
+        <h3>外觀</h3>
+        <div class="seg" role="group" aria-label="外觀" id="sTheme">
+          <button type="button" data-v="auto">跟系統</button>
+          <button type="button" data-v="light">亮色</button>
+          <button type="button" data-v="dark">暗色</button>
+        </div>
+      </div>
+      <div class="group" id="a2hs" hidden>
+        <h3>加到 iPhone 主畫面</h3>
+        <p class="hint">用 Safari 打開這個網址 → 點下方的分享按鈕 → 選「加入主畫面」，之後都從桌面的圖示打開。這樣進度比較不會被 iPhone 自動清掉。主畫面版和 Safari 裡的進度是分開的，要搬過去請用下方的同步碼或備份檔。</p>
+      </div>
+      <div class="group">
+        <h3>雲端同步</h3>
+        <div id="syncNote"></div>
+      </div>
+      <div class="group">
+        <h3>備份進度</h3>
+        <p class="hint">進度只存在這支手機的瀏覽器裡。換手機、換瀏覽器，或清除瀏覽資料之前，先下載備份檔，之後再讀回來就能接著背。</p>
+        <p class="actions row"><button class="btn small" type="button" id="exportBtn">下載備份檔</button>
+          <label class="btn small" for="importFile">讀取備份檔</label>
+          <input type="file" id="importFile" accept=".json,application/json" class="vh"></p>
+        <p class="hint" id="backupNote" aria-live="polite"></p>
+      </div>
+      <div class="group">
+        <h3>重新開始</h3>
+        <p class="hint">清掉分數、連續紀錄、程度測驗和每個字的進度。你自己加的字和設定會留著。</p>
+        <p><button class="btn danger" type="button" id="resetBtn">重設進度</button></p>
+        <p class="hint" id="resetNote" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<nav class="nav" aria-label="主選單">
+  <ul>
+    <li><button type="button" data-tab="today" aria-current="page">今日</button></li>
+    <li><button type="button" data-tab="drill">練習</button></li>
+    <li><button type="button" data-tab="lib">字庫</button></li>
+    <li><button type="button" data-tab="log">紀錄</button></li>
+    <li><button type="button" data-tab="set">設定</button></li>
+  </ul>
+</nav>
+
+<script src="app.js?v=8"></script>
+</body>
+</html>

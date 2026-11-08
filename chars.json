@@ -1,0 +1,471 @@
+{
+ "_說明": "base 是圖片資料夾（結尾要有 /）。每個角色三張圖：idle 平常、happy 答對、sad 答錯，可以寫檔名（接在 base 後面）或完整網址。theme 是這個角色的配色，light／dark 分別是亮色和暗色模式；--gold 是主色（名次牌、進度條、外框），--celadon 是答對色，--seal 是答錯色。lines 是台詞，每種情境隨機抽一句。圖片讀不到時會顯示主色圓臉。 motifs 是這位角色的小貼紙，可用：star sparkle heart flower apple plane bone moon snowflake shell fish feather gem paw bubble。 ranks 是這位角色的稱號，由低到高；需要的分數照 config.json 的 rankXp。",
+ "base": "img/",
+ "characters": [
+  {
+   "id": "xavier",
+   "name": "沈星回",
+   "initial": "星",
+   "idle": "xavier/idle.png",
+   "happy": "xavier/happy.png",
+   "sad": "xavier/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#EEF2F8",
+     "--card": "#FAFCFF",
+     "--ink": "#1E2A4A",
+     "--ink-soft": "#5A6684",
+     "--line": "rgba(30,42,74,0.16)",
+     "--gold": "#9DBBE6",
+     "--gold-ink": "#1E2A4A",
+     "--celadon": "#3E7CB8",
+     "--celadon-bg": "rgba(62,124,184,0.13)",
+     "--seal": "#C2566B",
+     "--seal-bg": "rgba(194,86,107,0.1)"
+    },
+    "dark": {
+     "--paper": "#101828",
+     "--card": "#18233A",
+     "--ink": "#E3E9F5",
+     "--ink-soft": "#9AA6C0",
+     "--line": "rgba(227,233,245,0.15)",
+     "--gold": "#8FB0E8",
+     "--gold-ink": "#101828",
+     "--celadon": "#86B6E6",
+     "--celadon-bg": "rgba(134,182,230,0.15)",
+     "--seal": "#E07A8C",
+     "--seal-bg": "rgba(224,122,140,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "star",
+    "moon",
+    "sparkle",
+    "heart"
+   ],
+   "ranks": [
+    "搭檔",
+    "小星球",
+    "小師妹",
+    "絨毛小兔",
+    "遙遠行星",
+    "小王妃",
+    "溯光之人",
+    "另一顆星",
+    "月光騎士"
+   ]
+  },
+  {
+   "id": "zayne",
+   "name": "黎深",
+   "initial": "深",
+   "idle": "zayne/idle.png",
+   "happy": "zayne/happy.png",
+   "sad": "zayne/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#EDF3F4",
+     "--card": "#FAFDFD",
+     "--ink": "#22343B",
+     "--ink-soft": "#55686F",
+     "--line": "rgba(34,52,59,0.16)",
+     "--gold": "#A7C8D4",
+     "--gold-ink": "#22343B",
+     "--celadon": "#3D7F8C",
+     "--celadon-bg": "rgba(61,127,140,0.13)",
+     "--seal": "#B8545A",
+     "--seal-bg": "rgba(184,84,90,0.1)"
+    },
+    "dark": {
+     "--paper": "#0F1A1E",
+     "--card": "#172529",
+     "--ink": "#E1ECEE",
+     "--ink-soft": "#93A8AE",
+     "--line": "rgba(225,236,238,0.15)",
+     "--gold": "#8EBBC9",
+     "--gold-ink": "#0F1A1E",
+     "--celadon": "#7CC0CC",
+     "--celadon-bg": "rgba(124,192,204,0.15)",
+     "--seal": "#E07C80",
+     "--seal-bg": "rgba(224,124,128,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "snowflake",
+    "sparkle",
+    "heart",
+    "star"
+   ],
+   "ranks": [
+    "小雪人",
+    "小大夫",
+    "小茉莉",
+    "冰糖雪梨",
+    "海豹冰彈",
+    "救贖者",
+    "結緣之人",
+    "另一粒雪",
+    "雲間茉莉"
+   ]
+  },
+  {
+   "id": "rafayel",
+   "name": "祁煜",
+   "initial": "煜",
+   "idle": "rafayel/idle.png",
+   "happy": "rafayel/happy.png",
+   "sad": "rafayel/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#F5EFF8",
+     "--card": "#FDFAFE",
+     "--ink": "#352347",
+     "--ink-soft": "#6E5B80",
+     "--line": "rgba(53,35,71,0.16)",
+     "--gold": "#C9A6E4",
+     "--gold-ink": "#352347",
+     "--celadon": "#2F8C93",
+     "--celadon-bg": "rgba(47,140,147,0.13)",
+     "--seal": "#C24F78",
+     "--seal-bg": "rgba(194,79,120,0.1)"
+    },
+    "dark": {
+     "--paper": "#18121F",
+     "--card": "#22192C",
+     "--ink": "#EDE4F4",
+     "--ink-soft": "#A898B8",
+     "--line": "rgba(237,228,244,0.15)",
+     "--gold": "#B992DE",
+     "--gold-ink": "#18121F",
+     "--celadon": "#6CC4C8",
+     "--celadon-bg": "rgba(108,196,200,0.15)",
+     "--seal": "#E07AA0",
+     "--seal-bg": "rgba(224,122,160,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "shell",
+    "fish",
+    "bubble",
+    "sparkle"
+   ],
+   "ranks": [
+    "小畫家",
+    "小城主",
+    "小海螺",
+    "小珍珠",
+    "小魚尾巴",
+    "寶寶小姐",
+    "契約者",
+    "銘心之人",
+    "另一片海",
+    "公主殿下"
+   ]
+  },
+  {
+   "id": "sylus",
+   "name": "秦徹",
+   "initial": "徹",
+   "idle": "sylus/idle.png",
+   "happy": "sylus/happy.png",
+   "sad": "sylus/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#F4EEEE",
+     "--card": "#FDFAFA",
+     "--ink": "#1C1416",
+     "--ink-soft": "#6A5A5D",
+     "--line": "rgba(28,20,22,0.16)",
+     "--gold": "#B8323A",
+     "--gold-ink": "#FFFFFF",
+     "--celadon": "#3F7A6A",
+     "--celadon-bg": "rgba(63,122,106,0.13)",
+     "--seal": "#B8323A",
+     "--seal-bg": "rgba(184,50,58,0.1)"
+    },
+    "dark": {
+     "--paper": "#120D0E",
+     "--card": "#1D1517",
+     "--ink": "#EFE6E7",
+     "--ink-soft": "#A8999B",
+     "--line": "rgba(239,230,231,0.15)",
+     "--gold": "#D0454D",
+     "--gold-ink": "#FFFFFF",
+     "--celadon": "#7FB3A4",
+     "--celadon-bg": "rgba(127,179,164,0.15)",
+     "--seal": "#E8707A",
+     "--seal-bg": "rgba(232,112,122,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "feather",
+    "gem",
+    "sparkle",
+    "heart"
+   ],
+   "ranks": [
+    "小烏鴉",
+    "小羽毛",
+    "小狸花",
+    "魔女",
+    "龍角尖尖",
+    "夜色來客",
+    "共生者",
+    "夫人",
+    "魂契之人",
+    "向此沉淪"
+   ]
+  },
+  {
+   "id": "caleb",
+   "name": "夏以晝",
+   "initial": "晝",
+   "idle": "caleb/idle.png",
+   "happy": "caleb/happy.png",
+   "sad": "caleb/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#FBF4E4",
+     "--card": "#FFFDF7",
+     "--ink": "#5A3A1E",
+     "--ink-soft": "#8A6B4C",
+     "--line": "rgba(90,58,30,0.16)",
+     "--gold": "#E3A43A",
+     "--gold-ink": "#4A2E14",
+     "--celadon": "#5E9A5A",
+     "--celadon-bg": "rgba(94,154,90,0.13)",
+     "--seal": "#E0574C",
+     "--seal-bg": "rgba(224,87,76,0.1)"
+    },
+    "dark": {
+     "--paper": "#1E1710",
+     "--card": "#2A2016",
+     "--ink": "#F3E8D6",
+     "--ink-soft": "#B8A58A",
+     "--line": "rgba(243,232,214,0.15)",
+     "--gold": "#E6AC48",
+     "--gold-ink": "#1E1710",
+     "--celadon": "#93C48C",
+     "--celadon-bg": "rgba(147,196,140,0.15)",
+     "--seal": "#EE7E72",
+     "--seal-bg": "rgba(238,126,114,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "apple",
+    "plane",
+    "bone",
+    "star",
+    "flower"
+   ],
+   "ranks": [
+    "報時小鳥",
+    "妹球",
+    "小蘋果",
+    "小蛋糕",
+    "寶貝妹妹",
+    "同源體",
+    "牽線風箏",
+    "覺醒者",
+    "牽念之人"
+   ]
+  },
+  {
+   "id": "aoyin",
+   "name": "敖尹",
+   "initial": "尹",
+   "idle": "aoyin/idle.png",
+   "happy": "aoyin/happy.png",
+   "sad": "aoyin/sad.png",
+   "theme": {
+    "light": {
+     "--paper": "#F4EFE8",
+     "--card": "#FDFBF8",
+     "--ink": "#2B2320",
+     "--ink-soft": "#6B5F58",
+     "--line": "rgba(43,35,32,0.16)",
+     "--gold": "#D99A2B",
+     "--gold-ink": "#2B2320",
+     "--celadon": "#4F7F5E",
+     "--celadon-bg": "rgba(79,127,94,0.13)",
+     "--seal": "#A8402E",
+     "--seal-bg": "rgba(168,64,46,0.1)"
+    },
+    "dark": {
+     "--paper": "#15110F",
+     "--card": "#211B18",
+     "--ink": "#EEE6DE",
+     "--ink-soft": "#A69A90",
+     "--line": "rgba(238,230,222,0.15)",
+     "--gold": "#E0A63A",
+     "--gold-ink": "#15110F",
+     "--celadon": "#86B894",
+     "--celadon-bg": "rgba(134,184,148,0.15)",
+     "--seal": "#E06A55",
+     "--seal-bg": "rgba(224,106,85,0.16)"
+    }
+   },
+   "lines": {
+    "idle": [
+     "今天也一起背吧！",
+     "先把今天的份做完。",
+     "一天一點點，學測那天就會很多很多。"
+    ],
+    "happy": [
+     "答對了！",
+     "很好，這個字是你的了。",
+     "漂亮！"
+    ],
+    "sad": [
+     "沒關係，等一下會再考一次。",
+     "這個字很常考，多看一眼。",
+     "錯了才記得住，下次就會了。"
+    ],
+    "done": [
+     "今天的份完成了，辛苦了！",
+     "明天也要回來喔。"
+    ],
+    "rankup": [
+     "升官了！恭喜！"
+    ]
+   },
+   "motifs": [
+    "paw",
+    "moon",
+    "star",
+    "sparkle"
+   ],
+   "ranks": [
+    "小煎餅",
+    "小狼崽",
+    "毛茸尾巴",
+    "小月亮",
+    "同行者",
+    "狼后",
+    "逐夜之人",
+    "另一輪月",
+    "萬籟俱起"
+   ]
+  }
+ ]
+}
