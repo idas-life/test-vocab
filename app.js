@@ -1043,10 +1043,18 @@ function addCustom(){
 
 /* ---------- iPhone 加入主畫面 ---------- */
 function isIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
-function needA2HS(){ return isIOS() && !window.navigator.standalone && !matchMedia("(display-mode: standalone)").matches; }
+function isAndroid(){ return /Android/i.test(navigator.userAgent); }
+function isStandalone(){ return !!window.navigator.standalone || matchMedia("(display-mode: standalone)").matches; }
+function needA2HS(){ return (isIOS() || isAndroid()) && !isStandalone(); }
 function a2hsCard(){
-  return `<div class="plan-note a2hs"><p><b>先把網站加到主畫面</b></p><p>用 Safari 打開 → 點下方的分享按鈕 → 選「加入主畫面」→ 之後都從桌面的圖示打開。</p>
-    <p class="hint">這樣進度比較不會被 iPhone 自動清掉。注意：主畫面版和 Safari 裡的進度是分開存的，最好一開始就從主畫面版開始用。</p>
+  const how = isIOS()
+    ? `用 Safari 打開 → 點下方的分享按鈕 → 選「加入主畫面」→ 之後都從桌面的圖示打開。`
+    : `用 Chrome 打開 → 點右上角「⋮」→「加到主畫面」或「安裝應用程式」→ 之後都從桌面的圖示打開。`;
+  const why = isIOS()
+    ? `這樣進度比較不會被 iPhone 自動清掉。注意：主畫面版和 Safari 裡的進度是分開存的，最好一開始就從主畫面版開始用。`
+    : `開起來像 App，也不會跟其他分頁混在一起。`;
+  return `<div class="plan-note a2hs"><p><b>先把網站加到主畫面</b></p><p>${how}</p>
+    <p class="hint">${why}詳細步驟在「設定 → 怎麼保存進度」。</p>
     <div class="actions"><button class="btn small" type="button" data-a2hs-hide>知道了</button></div></div>`;
 }
 
@@ -1179,7 +1187,7 @@ function renderSet(){
   $("#sayHint").textContent = canSay ? "" : "這個瀏覽器不支援發音。";
   $("#resetBtn").textContent = resetArmed ? "再按一次確認重設" : "重設進度";
   renderSync();
-  const a2 = $("#a2hs"); if (a2) a2.hidden = !needA2HS();
+  if (!renderSet.opened){ renderSet.opened = true; const g = isAndroid() ? $("#guideAndroid") : isIOS() ? $("#guideIOS") : null; if (g) g.open = true; }
 }
 function exportBackup(){
   try {
@@ -1192,14 +1200,53 @@ function exportBackup(){
     $("#backupNote").textContent = "已下載備份檔。";
   } catch (e) { $("#backupNote").textContent = "這個瀏覽器沒辦法下載檔案。"; }
 }
+/* 備份文字：GSATJB1: + gzip + base64；不支援壓縮時用 GSATJB0: + base64 */
+function b64FromBytes(u8){ let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function bytesFromB64(b){ const s = atob(b); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+async function makeBackupText(){
+  const raw = new TextEncoder().encode(JSON.stringify(state));
+  if (typeof CompressionStream !== "undefined"){
+    const gz = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    return "GSATJB1:" + b64FromBytes(gz);
+  }
+  return "GSATJB0:" + b64FromBytes(raw);
+}
+async function readBackupText(t){
+  t = String(t || "").trim().replace(/\s+/g, "");
+  if (t.startsWith("{")) return JSON.parse(t);
+  const m = t.match(/^GSATJB([01]):(.+)$/); if (!m) throw new Error("bad");
+  let bytes = bytesFromB64(m[2]);
+  if (m[1] === "1"){
+    if (typeof DecompressionStream === "undefined") throw new Error("nogz");
+    bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+function adoptBackup(data){
+  if (!data || typeof data !== "object" || !data.prog) throw new Error("bad");
+  const keepSync = state.sync;
+  state = normalize(data); if (!state.sync || !state.sync.code) state.sync = keepSync;
+  rebuild(); ensureToday(); sanitizeToday(); cur = null; save(); applyTheme(); applySkin(); renderAll();
+  $("#backupNote").textContent = `還原完成：${Object.keys(state.prog).length} 個字的進度、${state.xp} 分。`;
+}
+async function copyBackup(){
+  const note = $("#backupNote");
+  try {
+    const t = await makeBackupText();
+    try { await navigator.clipboard.writeText(t); note.textContent = `已複製備份文字（${Math.ceil(t.length / 1024)} KB）。貼到 LINE Keep 或備忘錄存起來。`; }
+    catch (e) { const ta = $("#restoreText"); ta.value = t; ta.closest("details").open = true; ta.select(); note.textContent = "這個瀏覽器不能自動複製，備份文字已經放在下方的框裡，請長按全選後複製。"; }
+  } catch (e) { note.textContent = "產生備份文字失敗，請改用下載備份檔。"; }
+}
+async function restoreFromText(){
+  const note = $("#backupNote");
+  try { adoptBackup(await readBackupText($("#restoreText").value)); $("#restoreText").value = ""; }
+  catch (e) { note.textContent = String(e && e.message) === "nogz" ? "這支手機的瀏覽器太舊，讀不了這份備份，請更新系統或改用備份檔。" : "這段文字讀不出來，請確認是從這裡複製的完整備份文字。"; }
+}
 function importBackup(file){
   const r = new FileReader();
   r.onload = () => {
     try {
-      const data = JSON.parse(r.result);
-      if (!data || typeof data !== "object" || !data.prog) throw new Error("bad");
-      state = normalize(data); rebuild(); ensureToday(); sanitizeToday(); cur = null; save(); applyTheme(); renderAll();
-      $("#backupNote").textContent = `讀取完成：${Object.keys(state.prog).length} 個字的進度、${state.xp} 分。`;
+      readBackupText(r.result).then(adoptBackup).catch(() => { $("#backupNote").textContent = "這個檔案讀不出來，請確認是從這裡下載的備份檔。"; });
     } catch (e) { $("#backupNote").textContent = "這個檔案讀不出來，請確認是從這裡下載的備份檔。"; }
   };
   r.readAsText(file);
@@ -1336,6 +1383,8 @@ $("#view-set").addEventListener("click", e => {
   }
   if (e.target.closest("#retestBtn")){ showTab("today"); startTest(); renderToday(); focusMain(); return; }
   if (e.target.closest("#exportBtn")){ exportBackup(); return; }
+  if (e.target.closest("#copyBackup")){ copyBackup(); return; }
+  if (e.target.closest("#restoreBtn")){ restoreFromText(); return; }
   if (e.target.closest("#redeemBtn")){ redeem($("#redeemIn").value); return; }
   if (e.target.closest("#copyCode")){ try { navigator.clipboard.writeText(state.sync.code).then(() => { $("#syncMsg").textContent = "已複製。"; }, () => { $("#syncMsg").textContent = "請手動抄下這組碼。"; }); } catch (err) { $("#syncMsg").textContent = "請手動抄下這組碼。"; } return; }
   if (e.target.closest("#codeLoad")){ cloudLoad($("#codeIn").value); return; }

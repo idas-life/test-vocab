@@ -407,3 +407,12 @@ h3.sub{color:var(--deep);font-weight:400}
 .buddy{grid-template-columns:6.6rem minmax(0,1fr)}
 .buddy .pic{width:6.6rem;height:6.6rem}
 .pick-pic{width:5.4rem;height:5.4rem}
+
+/* 保存教學 */
+#saveGuide .fold{border-top:2px dotted var(--rim);margin-top:.6rem}
+#saveGuide .fold summary{cursor:pointer;font-size:1.02rem;padding:.55rem 0;color:var(--deep)}
+.guide{margin:.2rem 0 .6rem;padding-left:1.3rem;display:grid;gap:.5rem;font-size:.96rem}
+.guide b{font-weight:400;color:var(--deep)}
+.restore{margin-top:.6rem}
+.restore summary{cursor:pointer;color:var(--deep);padding:.3rem 0}
+#restoreText{font-family:ui-monospace,monospace;font-size:.8rem;margin-top:.4rem}

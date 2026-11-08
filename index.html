@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div class="wrap">
@@ -132,9 +132,30 @@
           <button type="button" data-v="dark">暗色</button>
         </div>
       </div>
-      <div class="group" id="a2hs" hidden>
-        <h3>加到 iPhone 主畫面</h3>
-        <p class="hint">用 Safari 打開這個網址 → 點下方的分享按鈕 → 選「加入主畫面」，之後都從桌面的圖示打開。這樣進度比較不會被 iPhone 自動清掉。主畫面版和 Safari 裡的進度是分開的，要搬過去請用下方的同步碼或備份檔。</p>
+      <div class="group" id="saveGuide">
+        <h3>怎麼保存進度</h3>
+        <p class="hint">進度每答一題就自動存在這支手機裡，重新整理、關掉網頁都不會不見。照下面做，就不怕被手機清掉。</p>
+        <details class="fold" id="guideIOS">
+          <summary>iPhone／iPad</summary>
+          <ol class="guide">
+            <li><b>用 Safari 打開網址</b>（用 LINE 或 IG 裡的瀏覽器打開的話，先點右下角選「用 Safari 開啟」）。</li>
+            <li><b>加入主畫面</b>：點下方中間的分享按鈕（方框加向上箭頭）→ 往下滑選「加入主畫面」→ 右上角「新增」。</li>
+            <li><b>之後只從桌面的圖示打開</b>。主畫面版和 Safari 版的進度是分開存的，混著用會以為進度不見了。</li>
+            <li><b>不要刪掉桌面上的圖示</b>，刪掉會連進度一起刪。</li>
+            <li><b>每週備份一次</b>：下方按「複製備份文字」，貼到 LINE 的 Keep 或「備忘錄」存起來。</li>
+          </ol>
+          <p class="hint">為什麼要加主畫面：iPhone 的 Safari 會清掉太久沒打開的網站資料，加到主畫面的不會。</p>
+        </details>
+        <details class="fold" id="guideAndroid">
+          <summary>Android</summary>
+          <ol class="guide">
+            <li><b>用 Chrome 打開網址</b>（從 LINE 打開的話，點右上角「⋮」選「用預設瀏覽器開啟」）。</li>
+            <li><b>加到主畫面</b>：點右上角「⋮」→「加到主畫面」或「安裝應用程式」→「安裝」。</li>
+            <li><b>之後從桌面的圖示打開</b>。Chrome 和桌面圖示的進度是同一份。</li>
+            <li><b>不要在 Chrome 設定裡清除這個網站的資料</b>，也不要清除 Chrome 的「儲存空間」。</li>
+            <li><b>每週備份一次</b>：下方按「複製備份文字」貼到 LINE Keep，或按「下載備份檔」存到手機的「下載」資料夾。</li>
+          </ol>
+        </details>
       </div>
       <div class="group">
         <h3>雲端同步</h3>
@@ -142,10 +163,18 @@
       </div>
       <div class="group">
         <h3>備份進度</h3>
-        <p class="hint">進度只存在這支手機的瀏覽器裡。換手機、換瀏覽器，或清除瀏覽資料之前，先下載備份檔，之後再讀回來就能接著背。</p>
-        <p class="actions row"><button class="btn small" type="button" id="exportBtn">下載備份檔</button>
-          <label class="btn small" for="importFile">讀取備份檔</label>
-          <input type="file" id="importFile" accept=".json,application/json" class="vh"></p>
+        <p class="hint">換手機、換瀏覽器，或清除資料之前，先備份；之後在新的地方還原，就能接著背。</p>
+        <p class="actions row"><button class="btn small" type="button" id="copyBackup">複製備份文字</button>
+          <button class="btn small" type="button" id="exportBtn">下載備份檔</button></p>
+        <details class="fold restore">
+          <summary>還原進度</summary>
+          <label class="vh" for="restoreText">貼上備份文字</label>
+          <textarea id="restoreText" class="field" rows="3" placeholder="把之前複製的備份文字貼在這裡" autocomplete="off" spellcheck="false"></textarea>
+          <p class="actions row"><button class="btn small" type="button" id="restoreBtn">用備份文字還原</button>
+            <label class="btn small" for="importFile">讀取備份檔</label>
+            <input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" class="vh"></p>
+          <p class="hint">還原會取代這支手機上目前的進度。</p>
+        </details>
         <p class="hint" id="backupNote" aria-live="polite"></p>
       </div>
       <div class="group">
@@ -168,6 +197,6 @@
   </ul>
 </nav>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
