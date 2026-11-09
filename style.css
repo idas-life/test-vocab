@@ -416,3 +416,12 @@ h3.sub{color:var(--deep);font-weight:400}
 .restore{margin-top:.6rem}
 .restore summary{cursor:pointer;color:var(--deep);padding:.3rem 0}
 #restoreText{font-family:ui-monospace,monospace;font-size:.8rem;margin-top:.4rem}
+
+/* 授權與來源 */
+.credits{margin:.5rem 0 0;display:grid;grid-template-columns:5.2em 1fr;gap:.45rem .8rem;font-size:.9rem;line-height:1.55}
+.credits dt{color:var(--deep);font-weight:700}
+.credits dd{margin:0;color:var(--ink)}
+.credits a{color:var(--deep);text-decoration:underline;text-underline-offset:2px;word-break:break-word}
+#credits .me{border-top:2px dotted var(--rim);margin-top:.9rem}
+#credits .me summary{cursor:pointer;padding:.55rem 0;color:var(--deep);font-size:1rem}
+#credits .me p{font-size:.9rem;margin:.3rem 0}

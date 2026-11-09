@@ -429,30 +429,32 @@
    "sad": "aoyin/sad.png",
    "theme": {
     "light": {
-     "--paper": "#F4EFE8",
-     "--card": "#FDFBF8",
-     "--ink": "#2B2320",
-     "--ink-soft": "#6B5F58",
-     "--line": "rgba(43,35,32,0.16)",
-     "--gold": "#D99A2B",
-     "--gold-ink": "#2B2320",
-     "--celadon": "#4F7F5E",
-     "--celadon-bg": "rgba(79,127,94,0.13)",
-     "--seal": "#A8402E",
-     "--seal-bg": "rgba(168,64,46,0.1)"
+     "--paper": "#EEF6F1",
+     "--card": "#FBFEFC",
+     "--ink": "#33282A",
+     "--ink-soft": "#6E6260",
+     "--line": "rgba(51,40,42,0.16)",
+     "--gold": "#8FD1B5",
+     "--gold-ink": "#33282A",
+     "--celadon": "#3C8C6C",
+     "--celadon-bg": "rgba(60,140,108,0.13)",
+     "--seal": "#C2577A",
+     "--seal-bg": "rgba(194,87,122,0.1)",
+     "--deep": "#2E7D60"
     },
     "dark": {
-     "--paper": "#15110F",
-     "--card": "#211B18",
-     "--ink": "#EEE6DE",
-     "--ink-soft": "#A69A90",
-     "--line": "rgba(238,230,222,0.15)",
-     "--gold": "#E0A63A",
-     "--gold-ink": "#15110F",
-     "--celadon": "#86B894",
-     "--celadon-bg": "rgba(134,184,148,0.15)",
-     "--seal": "#E06A55",
-     "--seal-bg": "rgba(224,106,85,0.16)"
+     "--paper": "#0F1A16",
+     "--card": "#172521",
+     "--ink": "#E4EFE9",
+     "--ink-soft": "#98ABA3",
+     "--line": "rgba(228,239,233,0.15)",
+     "--gold": "#7CC7A8",
+     "--gold-ink": "#0F1A16",
+     "--celadon": "#86CFA9",
+     "--celadon-bg": "rgba(134,207,169,0.15)",
+     "--seal": "#E58AA6",
+     "--seal-bg": "rgba(229,138,166,0.16)",
+     "--deep": "#9BDDBF"
     }
    },
    "lines": {
@@ -477,8 +479,8 @@
    },
    "motifs": [
     "paw",
+    "flower",
     "moon",
-    "star",
     "sparkle"
    ],
    "ranks": [

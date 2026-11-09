@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div class="wrap">
@@ -155,6 +155,7 @@
             <li><b>不要在 Chrome 設定裡清除這個網站的資料</b>，也不要清除 Chrome 的「儲存空間」。</li>
             <li><b>每週備份一次</b>：下方按「複製備份文字」貼到 LINE Keep，或按「下載備份檔」存到手機的「下載」資料夾。</li>
           </ol>
+          <p class="hint">如果跳出「Google Play 安全防護：已封鎖不安全的應用程式」：按「我知道了」就好，網站本身沒有問題。這通常是用三星內建的「網際網路」瀏覽器安裝時才會出現，請改用 Chrome 照上面的步驟加到主畫面。換瀏覽器之前，如果已經有進度，先「複製備份文字」，到 Chrome 打開後再還原。</p>
         </details>
       </div>
       <div class="group">
@@ -183,6 +184,29 @@
         <p><button class="btn danger" type="button" id="resetBtn">重設進度</button></p>
         <p class="hint" id="resetNote" aria-live="polite"></p>
       </div>
+      <div class="group" id="credits">
+        <h3>授權與來源</h3>
+        <dl class="credits">
+          <dt>學測單字</dt>
+          <dd>大學入學考試中心《高中英文參考詞彙表（111 學年度起適用）》</dd>
+          <dt>多益單字</dt>
+          <dd><a href="https://www.newgeneralservicelist.com/toeic-service-list" target="_blank" rel="noopener">TOEIC Service List 1.2</a>、<a href="https://www.newgeneralservicelist.com/business-service-list" target="_blank" rel="noopener">Business Service List 1.20</a>，作者 Charles Browne、Brent Culligan，以 <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hant" target="_blank" rel="noopener">CC BY-SA 4.0</a> 授權。本站的多益字庫（含中文釋義與分組）為改作，同樣以 CC BY-SA 4.0 釋出。</dd>
+          <dt>中文釋義</dt>
+          <dd>以 <a href="https://github.com/skywind3000/ECDICT" target="_blank" rel="noopener">ECDICT</a>（MIT 授權）為底稿，經人工校對為臺灣用語；簡繁轉換使用 OpenCC（Apache 2.0）。</dd>
+          <dt>字型</dt>
+          <dd>jf open 粉圓（justfont，SIL Open Font License 1.1）</dd>
+          <dt>角色插圖</dt>
+          <dd>繪師 shicha</dd>
+          <dt>角色</dt>
+          <dd>角色出自《戀與深空》，角色版權屬疊紙遊戲所有。本站為非營利的同人學習工具，與官方無關。</dd>
+        </dl>
+        <details class="fold me">
+          <summary>© 2026 陌魂兮</summary>
+          <p>網站設計與程式、例句、克漏字文章、角色台詞、敖尹的稱號：陌魂兮。</p>
+          <p>除了上方另外標示授權的內容，本站內容保留所有權利，未經同意請勿轉載、重製或用於商業用途。</p>
+          <p>角色插圖的著作權屬於繪師 shicha，請勿下載、轉存或另作他用。</p>
+        </details>
+      </div>
     </section>
   </main>
 </div>
@@ -197,6 +221,6 @@
   </ul>
 </nav>
 
-<script src="app.js?v=11"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

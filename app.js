@@ -72,7 +72,8 @@ function prepWord(r){
   else if (r.ex) w.ex = { s:r.ex, zh:"", pos:"", code:"" };
   return w;
 }
-function shortZh(w){ const first = w.m[0] ? w.m[0][1] : w.zh; return first.split("、").slice(0, 2).join("、"); }
+function splitTop(s){ const out = []; let d = 0, cur = ""; for (const ch of String(s || "")){ if (ch === "（" || ch === "(") d++; else if (ch === "）" || ch === ")") d = Math.max(0, d - 1); if (ch === "、" && d === 0){ out.push(cur); cur = ""; } else cur += ch; } out.push(cur); return out.filter(Boolean); }
+function shortZh(w){ const first = w.m[0] ? w.m[0][1] : w.zh; return splitTop(first).slice(0, 2).join("、"); }
 function plainEx(w){ return w.ex ? w.ex.s.replace(/[{}]/g, "") : ""; }
 
 let cur = null, pulsePlaque = false, lastSaid = "";
@@ -157,8 +158,10 @@ function mountPack(meta, data){
 }
 async function loadUnlocked(){
   for (const meta of PACKS){
+    if (PACK_WORDS[meta.id]) continue;
+    if (!meta.locked && meta.file){ try { mountPack(meta, await getJSON(meta.file)); } catch (e) {} continue; }
     const code = state.unlocks[meta.id];
-    if (!meta.locked || !code || PACK_WORDS[meta.id]) continue;
+    if (!meta.locked || !code) continue;
     try { mountPack(meta, await decryptPack(meta.file, code)); } catch (e) {}
   }
 }
@@ -279,7 +282,7 @@ function enterQuizIfNeeded(){
 
 /* ---------- questions ---------- */
 function segs(w){
-  return w.zh.split(/[、；，,;／\/]/).map(s => s.replace(/[（(].*?[）)]/g, "").replace(/的$/, "").trim()).filter(Boolean);
+  return w.zh.replace(/[（(][^）)]*[）)]/g, "").split(/[、；，,;／\/]/).map(s => s.replace(/的$/, "").trim()).filter(Boolean);
 }
 function conflicts(a, b){
   if (a.k.toLowerCase() === b.k.toLowerCase()) return true;
@@ -668,9 +671,9 @@ function renderToday(){
     const parts = [];
     if (nNew) parts.push(`${nNew} 個新字`);
     if (nRev) parts.push(`${nRev} 個複習`);
-    const lvs = [...new Set(T.newIds.map(id => (BYID.get(id) || {}).lv).filter(Boolean))].sort();
+    const lvs = [...new Set(T.newIds.map(id => (BYID.get(id) || {}).lv).filter(Boolean))].sort((a, b) => a - b);
     v.innerHTML = buddyHtml("") + `<h2>今日功課</h2><p class="lede">${parts.join("、")}。</p>
-      ${lvs.length ? `<p class="hint">新字來自第 ${lvs.join("、")} 級。先看過新字，再和複習的字一起考。</p>` : ""}
+      ${lvs.length ? `<p class="hint">新字來自${isGsat() ? `第 ${lvs.join("、")} 級` : `「${lvs.map(l => lvName(l)).join("、")}」`}。先看過新字，再和複習的字一起考。</p>` : ""}
       <div class="actions"><button class="btn primary" type="button" data-act="start">開始</button></div>`;
     hookImgs(v); return;
   }
@@ -1002,7 +1005,7 @@ function rowHtml(w){
       ${w.tag === "M" ? `<p><button type="button" class="btn danger small" data-lib="del" data-id="${esc(w.id)}">${ui.delArm === w.id ? "再按一次確認刪除" : "刪除這個字"}</button></p>` : ""}</div>`;
   }
   return `<li class="row"><button type="button" class="row-main" data-lib="toggle" data-id="${esc(w.id)}" aria-expanded="${open}">
-    <span class="row-word" lang="en">${esc(w.w)}<small>${w.tag === "M" ? "自訂" : w.lv + " 級"}</small></span><span class="row-zh">${esc(shortZh(w))}</span>
+    <span class="row-word" lang="en">${esc(w.w)}<small>${w.tag === "M" ? "自訂" : (isGsat() ? w.lv + " 級" : esc(lvName(w.lv)))}</small></span><span class="row-zh">${esc(shortZh(w))}</span>
     <i class="dot s${s}" aria-hidden="true"></i><span class="vh">${["未學","學習中","熟記"][s]}</span></button>${more}</li>`;
 }
 function renderLib(){
