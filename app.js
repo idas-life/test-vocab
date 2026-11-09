@@ -398,7 +398,18 @@ function applySkin(id){
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() || "#EEF0E6");
 }
-function linesFor(mood){ const c = charObj(); const L = (c && c.lines && c.lines[mood]) || DEFAULT_LINES[mood] || DEFAULT_LINES.idle; return L; }
+function linesFor(mood){
+  const c = charObj();
+  const base = (c && c.lines && c.lines[mood]) || [];
+  const pk = c && c.packLines && c.packLines[curPackId()];
+  const L = base.concat((pk && pk[mood]) || []);
+  return L.length ? L : (DEFAULT_LINES[mood] || DEFAULT_LINES.idle);
+}
+function fillLine(s){
+  if (!s) return s;
+  const title = (RANKS_()[rankIndex(state.xp)] || [""])[0];
+  return String(s).replace(/\{稱號\}/g, title);
+}
 function setMood(mood, key){
   const k = mood + "|" + key;
   if (ui.lineKey === k) return;
@@ -421,7 +432,7 @@ function buddyHtml(anim){
   const src = imgSrc(c, file);
   const pic = src && !badImg.has(src) ? `<img src="${esc(src)}" alt="" data-mood="${esc(mood)}" draggable="false"><i class="shield" aria-hidden="true"></i>` : placeholderSvg(mood);
   return `<div class="buddy"><div class="pic${anim ? " " + anim : ""}">${pic}</div>
-    <p class="bubble" aria-live="polite">${c && c.name ? `<span class="who">${esc(c.name)}</span>` : ""}${esc(ui.line)}</p></div>`;
+    <p class="bubble" aria-live="polite">${c && c.name ? `<span class="who">${esc(c.name)}</span>` : ""}${esc(fillLine(ui.line))}</p></div>`;
 }
 const badImg = new Set();
 function hookImgs(root){
