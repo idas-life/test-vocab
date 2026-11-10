@@ -39,7 +39,7 @@
   },
   {
    "id": "toefl",
-   "name": "托福綠寶書",
+   "name": "托福",
    "file": "packs/toefl.lock.json",
    "locked": true
   }

@@ -57,6 +57,21 @@ const weekday = n => new Date(n * 86400000).getUTCDay();
 const EXAM_DAY = dayNum(EXAM_DAY_DATE);
 function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function pick(a){ return a[Math.floor(Math.random() * a.length)]; }
+/* 正確答案的位置：四選一時從「每個位置各兩次」的袋子裡抽，避免連續好幾題都在同一側 */
+let posBag = [];
+function answerSlot(n){
+  if (n !== 4) return Math.floor(Math.random() * n);
+  if (!posBag.length) posBag = shuffle([0, 0, 1, 1, 2, 2, 3, 3]);
+  return posBag.pop();
+}
+function placeAnswer(opts, isAns){
+  const i = opts.findIndex(isAns); if (i < 0) return opts;
+  const s = answerSlot(opts.length); [opts[i], opts[s]] = [opts[s], opts[i]]; return opts;
+}
+/* 只有用鍵盤操作時才自動移動焦點，手機點選不會讓某個選項被框起來 */
+let kbd = false;
+document.addEventListener("keydown", () => { kbd = true; }, true);
+document.addEventListener("pointerdown", () => { kbd = false; }, true);
 function mainPos(p){ return String(p || "").replace(/[()]/g, "").split("/")[0].replace(/\.$/, ""); }
 
 /* ---------- data ---------- */
@@ -346,12 +361,12 @@ function makeQuestion(id, forceType){
     if (ds.length < 3) ds = distractors(w, 3, x => hasPos(x, p) && nearLv(w, x, 1) && okForm(x));
     const opts = [{ id:w.id, label:form }].concat(ds.map(x => ({ id:x.id, label:fix(inflect(x, code)) })));
     const seen = new Set(); const uniq = opts.filter(o => { const k = o.label.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
-    return { id, type, opts:shuffle(uniq), picked:null, form };
+    return { id, type, opts:placeAnswer(shuffle(uniq), o => o.id === w.id), picked:null, form };
   }
   const p = mainPos(w.m[0] ? w.m[0][0] : w.pos);
   const ds = distractors(w, 3, x => hasPos(x, p) && nearLv(w, x, 1));
   const opts = [w].concat(ds).map(x => ({ id:x.id, label: type === "en2zh" ? shortZh(x) : x.k }));
-  return { id, type, opts:shuffle(opts), picked:null };
+  return { id, type, opts:placeAnswer(shuffle(opts), o => o.id === w.id), picked:null };
 }
 
 /* ---------- progress updates ---------- */
@@ -752,7 +767,7 @@ function answer(pickId){
   addXp(gain); T.xp += gain;
   setMood(ok ? "happy" : "sad", "a-" + T.day + "-" + T.pos);
   save(); renderHeader(); renderToday();
-  const nb = $('[data-act="next"]'); if (nb) nb.focus({ preventScroll:true });
+  const nb = $('[data-act="next"]'); if (nb && kbd) nb.focus({ preventScroll:true });
 }
 function next(){
   const T = state.today;
@@ -847,7 +862,7 @@ function drillResult(ok){
 function drillPick(id){
   const q = drill.q; if (!q || q.picked != null) return;
   q.picked = id; drillResult(id === q.id); renderDrill();
-  const nb = $('[data-drill="next"]'); if (nb) nb.focus({ preventScroll:true });
+  const nb = $('[data-drill="next"]'); if (nb && kbd) nb.focus({ preventScroll:true });
 }
 function drillCheckSpell(skip){
   if (drill.checked) return;
@@ -856,7 +871,7 @@ function drillCheckSpell(skip){
   drill.ok = !!val && acceptable(BYID.get(drill.q.id)).has(val);
   drill.q.picked = val || "(skip)";
   drillResult(drill.ok); renderDrill();
-  const nb = $('[data-drill="next"]'); if (nb) nb.focus({ preventScroll:true });
+  const nb = $('[data-drill="next"]'); if (nb && kbd) nb.focus({ preventScroll:true });
 }
 function drillNext(){
   drill.pos++;
@@ -877,7 +892,7 @@ function startPassage(){
   const near = pool.filter(p => p.lv >= Math.min(s, 5) - 1 && p.lv <= Math.max(s, 3) + 1);
   const p = pick(near.length ? near : pool);
   state.drills.pseen.push(p.id);
-  pas = { p, pos:0, picks:[], opts:p.qs.map(q => shuffle(q.opts.slice())), t0:Date.now(), done:false };
+  pas = { p, pos:0, picks:[], opts:p.qs.map(q => placeAnswer(shuffle(q.opts.slice()), o => o === q.a)), t0:Date.now(), done:false };
   drill = { mode:"passage" };
   setMood("idle", "pas-" + p.id);
   save(); renderDrill(); focusMain();
@@ -902,7 +917,7 @@ function passagePick(opt){
   else if (q.word){ if (state.prog[q.word]) lapse(q.word); else state.prog[q.word] = [1, dayNum() + 1, 1, 0]; }
   setMood(ok ? "happy" : "sad", "pp-" + pas.p.id + "-" + pas.pos);
   save(); renderHeader(); renderDrill();
-  const nb = $('[data-pas="next"]'); if (nb) nb.focus({ preventScroll:true });
+  const nb = $('[data-pas="next"]'); if (nb && kbd) nb.focus({ preventScroll:true });
 }
 function passageNext(){
   pas.pos++; pas.last = null;
@@ -1132,7 +1147,7 @@ function renderLib(){
     <button class="btn small" type="button" data-lib="more">再顯示 ${Math.min(LIB_PAGE, rest)} 個</button>` : "";
   $("#listEmpty").hidden = items.length > 0;
 }
-function refocusRow(id, sel){ const el = document.querySelector(`[data-lib="${sel}"][data-id="${CSS.escape(id)}"]`); if (el) el.focus({ preventScroll:true }); }
+function refocusRow(id, sel){ const el = document.querySelector(`[data-lib="${sel}"][data-id="${CSS.escape(id)}"]`); if (el && kbd) el.focus({ preventScroll:true }); }
 function deleteCustom(id){
   state.custom = state.custom.filter(c => c.w.toLowerCase() !== id);
   delete state.prog[id];
@@ -1410,7 +1425,9 @@ function showTab(t){
   window.scrollTo(0, 0);
 }
 function focusMain(){
-  const el = $('#view-today:not([hidden]) [data-act="learned"]') || $('#spellIn') || $('main section:not([hidden]) .opt:not(:disabled)') || $('main section:not([hidden]) .btn.primary');
+  const sp = $('#spellIn'); if (sp){ sp.focus({ preventScroll:true }); return; }
+  if (!kbd){ if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); return; }
+  const el = $('#view-today:not([hidden]) [data-act="learned"]') || $('main section:not([hidden]) .opt:not(:disabled)') || $('main section:not([hidden]) .btn.primary');
   if (el) el.focus({ preventScroll:true });
 }
 
@@ -1419,7 +1436,7 @@ document.addEventListener("click", e => {
   const go = e.target.closest("[data-tab-go]"); if (go){ showTab(go.dataset.tabGo); return; }
   if (e.target.closest("[data-a2hs-hide]")){ state.settings.hideA2HS = true; save(); renderToday(); return; }
   const sp = e.target.closest("[data-skin-pick]");
-  if (sp){ pickId = sp.dataset.skinPick; applySkin(pickId); renderToday(); const again = document.querySelector(`[data-skin-pick="${CSS.escape(pickId)}"]`); if (again) again.focus({ preventScroll:true }); return; }
+  if (sp){ pickId = sp.dataset.skinPick; applySkin(pickId); renderToday(); const again = document.querySelector(`[data-skin-pick="${CSS.escape(pickId)}"]`); if (again && kbd) again.focus({ preventScroll:true }); return; }
   if (e.target.closest("[data-skin-ok]")){
     state.settings.char = pickId || state.settings.char; state.settings.charChosen = true; ui.lineKey = "";
     applySkin(); save(); renderAll(); focusMain(); return;
