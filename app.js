@@ -60,7 +60,7 @@ function pick(a){ return a[Math.floor(Math.random() * a.length)]; }
 function mainPos(p){ return String(p || "").replace(/[()]/g, "").split("/")[0].replace(/\.$/, ""); }
 
 /* ---------- data ---------- */
-let CFG = null, BANK = [], ALLW = [], PACK_WORDS = {}, PACKS = [], EX = {}, PASS = [], CHARS = { base:"img/", characters:[] }, FB_CFG = null;
+let CFG = null, BANK = [], ALLW = [], PACK_WORDS = {}, PACKS = [], EX = {}, PASS = [], FILL = [], CHARS = { base:"img/", characters:[] }, FB_CFG = null;
 let WORDS = [], BYID = new Map(), BANK_IDS = new Set();
 
 function prepWord(r){
@@ -82,7 +82,7 @@ const ui = { q:"", lv:"all", st:"all", open:null, delArm:null, limit:LIB_PAGE, m
 
 function freshState(){
   return { v:1, updatedAt:0, prog:{}, xp:0, streak:0, best:0, lastDay:null, history:{}, custom:[], today:null,
-           placement:null, drills:{ seen:[], pseen:[], right:0, total:0 }, log:[], sync:{ code:"" }, unlocks:{}, packStart:{},
+           placement:null, drills:{ seen:[], pseen:[], fseen:[], right:0, total:0 }, log:[], sync:{ code:"" }, unlocks:{}, packStart:{},
            settings:{ daily:20, startLv:3, autoSay:false, theme:"auto", char:"", charChosen:false } };
 }
 function normalize(s){
@@ -93,6 +93,7 @@ function normalize(s){
   out.drills = Object.assign(freshState().drills, s.drills || {});
   if (!Array.isArray(out.drills.seen)) out.drills.seen = [];
   if (!Array.isArray(out.drills.pseen)) out.drills.pseen = [];
+  if (!Array.isArray(out.drills.fseen)) out.drills.fseen = [];
   if (!Array.isArray(out.log)) out.log = [];
   out.sync = Object.assign({ code:"" }, s.sync || {});
   if (!out.unlocks || typeof out.unlocks !== "object") out.unlocks = {};
@@ -643,6 +644,12 @@ function renderPicker(v){
 
 /* ---------- today view ---------- */
 function renderToday(){
+  renderTodayInner();
+  const v = $("#view-today"), ph = (!test && state.today && state.settings.charChosen !== false && (state.placement || !isGsat())) ? phase() : "";
+  if (ph === "start" || ph === "done"){ const c = backupCard(); if (c){ const b = v.querySelector(".buddy"); if (b) b.insertAdjacentHTML("afterend", c); else v.insertAdjacentHTML("afterbegin", c); } }
+  else ui.bkMsg = "";
+}
+function renderTodayInner(){
   const v = $("#view-today");
   if (test){ renderTest(v); return; }
   document.body.classList.toggle("testing", !!test || (!state.settings.charChosen && (CHARS.characters || []).length > 0));
@@ -792,6 +799,7 @@ function clozePool(){
 function startDrill(mode){
   let ids = [];
   if (mode === "passage"){ startPassage(); return; }
+  if (mode === "fill"){ startFill(); return; }
   if (mode === "cloze"){
     const pool = clozePool().map(w => w.id), seen = state.drills.seen;
     let fresh = pool.filter(id => !seen.includes(id));
@@ -841,13 +849,12 @@ function drillPick(id){
   q.picked = id; drillResult(id === q.id); renderDrill();
   const nb = $('[data-drill="next"]'); if (nb) nb.focus({ preventScroll:true });
 }
-function drillCheckSpell(){
+function drillCheckSpell(skip){
   if (drill.checked) return;
-  const inp = $("#spellIn"); const val = (inp ? inp.value : drill.typed).trim().toLowerCase();
-  if (!val) return;
+  const inp = $("#spellIn"); const val = skip ? "" : (inp ? inp.value : drill.typed).trim().toLowerCase();
   drill.typed = val; drill.checked = true;
-  drill.ok = acceptable(BYID.get(drill.q.id)).has(val);
-  drill.q.picked = val;
+  drill.ok = !!val && acceptable(BYID.get(drill.q.id)).has(val);
+  drill.q.picked = val || "(skip)";
   drillResult(drill.ok); renderDrill();
   const nb = $('[data-drill="next"]'); if (nb) nb.focus({ preventScroll:true });
 }
@@ -857,7 +864,7 @@ function drillNext(){
   else setupDrillItem();
   renderDrill(); focusMain();
 }
-const MODE_NAME = { cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", daily:"每日功課", test:"程度測驗" };
+const MODE_NAME = { cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", fill:"文意選填", daily:"每日功課", test:"程度測驗" };
 const TYPE_NAME = { vocab:"詞彙", phrase:"片語", conj:"轉承詞", gram:"文法" };
 
 /* ---------- 克漏字 ---------- */
@@ -934,9 +941,100 @@ function renderPassage(v){
     <p class="ask">第 ${pas.pos + 1} 格要填什麼？</p><ul class="opts">${opts}</ul>`;
   hookImgs(v);
 }
+
+/* ---------- 文意選填 ---------- */
+let fil = null;
+const LETTERS = "ABCDEFGHIJ";
+function startFill(){
+  if (!FILL.length){ drill = { mode:"fill", empty:true }; renderDrill(); return; }
+  const s = state.settings.startLv || 1, seen = state.drills.fseen;
+  let pool = FILL.filter(p => !seen.includes(p.id));
+  if (!pool.length){ state.drills.fseen = []; pool = FILL.slice(); }
+  const near = pool.filter(p => p.lv >= Math.min(s, 5) - 1 && p.lv <= Math.max(s, 3) + 1);
+  const p = pick(near.length ? near : pool);
+  state.drills.fseen.push(p.id);
+  const bank = shuffle(p.blanks.map(b => b.a));
+  fil = { p, bank, put:Array(p.blanks.length).fill(null), cur:0, t0:Date.now(), done:false };
+  drill = { mode:"fill" };
+  setMood("idle", "fill-" + p.id);
+  save(); renderDrill(); focusMain();
+}
+function fillNextEmpty(from){
+  const n = fil.put.length;
+  for (let k = 1; k <= n; k++){ const i = (from + k) % n; if (fil.put[i] == null) return i; }
+  return from;
+}
+function fillAct(a, i){
+  if (!fil || fil.done) return;
+  if (a === "gap"){ i = +i; if (fil.cur === i && fil.put[i] != null) fil.put[i] = null; fil.cur = i; }
+  else if (a === "word"){
+    i = +i; const at = fil.put.indexOf(i);
+    if (at === fil.cur){ fil.put[at] = null; }
+    else { if (at >= 0) fil.put[at] = null; fil.put[fil.cur] = i; fil.cur = fillNextEmpty(fil.cur); }
+  }
+  else if (a === "clear"){ fil.put = fil.put.map(() => null); fil.cur = 0; }
+  else if (a === "submit"){ fillSubmit(); return; }
+  renderDrill();
+  const g = document.querySelector(".fgap.cur"); if (g && a === "word") g.scrollIntoView({ block:"nearest", behavior:"smooth" });
+}
+function fillSubmit(){
+  const p = fil.p; let r = 0; const wrong = [];
+  p.blanks.forEach((b, i) => {
+    const got = fil.put[i] == null ? null : fil.bank[fil.put[i]], ok = got === b.a;
+    state.drills.total++;
+    if (ok){ r++; state.drills.right++; addXp(DRILL_XP); credit(b.word); }
+    else { wrong.push(b.word); if (state.prog[b.word]) lapse(b.word); else state.prog[b.word] = [1, dayNum() + 1, 1, 0]; }
+  });
+  fil.done = true; fil.right = r;
+  logRun("fill", p.blanks.length, r, (Date.now() - fil.t0) / 1000, wrong);
+  setMood(r >= 7 ? "done" : "sad", "filldone-" + p.id + "-" + Date.now());
+  save(); renderHeader(); renderDrill(); focusMain();
+}
+function fillCap(text, idx){ return idx === 0 || /[.!?]["”]?\s*$/.test(text); }
+function fillText(){
+  const p = fil.p; let out = "", last = 0;
+  p.text.replace(/\[(\d+)\]/g, (m, d, off) => {
+    const before = p.text.slice(last, off); out += esc(before);
+    const i = +d - 1, b = p.blanks[i], cap = fillCap(p.text.slice(0, off), off);
+    const capf = t => cap ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+    if (fil.done){
+      const got = fil.put[i] == null ? null : fil.bank[fil.put[i]], ok = got === b.a;
+      out += `<span class="fgap ${ok ? "ok" : "no"}">${d}. ${esc(capf(b.a))}</span>`;
+    } else {
+      const k = fil.put[i];
+      out += `<button type="button" class="fgap${i === fil.cur ? " cur" : ""}${k != null ? " filled" : ""}" data-fill="gap" data-i="${i}" aria-label="第 ${d} 格${k != null ? "，已填 " + fil.bank[k] : "，空白"}">${d}${k != null ? `<b>${LETTERS[k]}</b> ${esc(capf(fil.bank[k]))}` : ""}</button>`;
+    }
+    last = off + m.length; return m;
+  });
+  return out + esc(p.text.slice(last));
+}
+function renderFill(v){
+  const p = fil.p, n = p.blanks.length;
+  if (fil.done){
+    const review = p.blanks.map((b, i) => { const got = fil.put[i] == null ? null : fil.bank[fil.put[i]], ok = got === b.a, L = LETTERS[fil.bank.indexOf(b.a)];
+      return `<li class="${ok ? "ok" : "no"}"><b lang="en">${i + 1}. (${L}) ${esc(b.a)}</b>${ok ? "" : `<span class="yours">${got ? `你填 ${esc(got)}` : "沒填"}</span>`}<p class="hint">${esc(b.why)}</p></li>`; }).join("");
+    v.innerHTML = buddyHtml(fil.right >= 7 ? "bounce" : "shake") + `<h2>文意選填結束</h2>
+      <dl class="result"><div><dt>答對</dt><dd>${fil.right}<small>／${n}</small></dd></div><div><dt>得分</dt><dd>+${fil.right * DRILL_XP}</dd></div><div><dt>用時</dt><dd>${Math.max(1, Math.round((Date.now() - fil.t0) / 60000))}<small>分</small></dd></div></dl>
+      <article class="card passage">${deco(2, "stk-card")}<h3 class="ptitle" lang="en">${esc(p.title)}</h3><p class="ptext" lang="en">${fillText()}</p></article>
+      <h3 class="sub">逐格解析</h3><ol class="review">${review}</ol>
+      <div class="actions row"><button class="btn primary" type="button" data-drill="go" data-mode="fill">再做一篇</button>
+      <button class="btn" type="button" data-drill="menu">回練習選單</button></div>`;
+    hookImgs(v); return;
+  }
+  const filled = fil.put.filter(x => x != null).length, left = n - filled;
+  const bank = fil.bank.map((w, k) => { const at = fil.put.indexOf(k);
+    return `<li><button type="button" class="fword${at >= 0 ? " used" : ""}" data-fill="word" data-i="${k}" lang="en"><span class="key">${LETTERS[k]}</span>${esc(w)}${at >= 0 ? `<small>${at + 1}</small>` : ""}</button></li>`; }).join("");
+  v.innerHTML = buddyHtml("") + `<p class="step"><span>文意選填</span>已填 ${filled}／${n}・第 ${p.lv} 級程度</p>
+    <article class="card passage">${deco(0, "stk-card")}<h3 class="ptitle" lang="en">${esc(p.title)}</h3><p class="ptext" lang="en">${fillText()}</p></article>
+    <div class="fbank"><p class="ask">第 ${fil.cur + 1} 格要填哪個字？</p><ul class="fwords">${bank}</ul></div>
+    <div class="actions row"><button class="btn primary" type="button" data-fill="submit">${left ? `交卷（還有 ${left} 格）` : "交卷"}</button>${filled ? `<button class="btn" type="button" data-fill="clear">全部清除</button>` : ""}<button class="btn" type="button" data-drill="menu">結束</button></div>
+    <p class="hint">點文章裡的空格可以換格；點已經用過的字，會把它移到目前這格。每個字只能用一次，全部填完再交卷。</p>`;
+  hookImgs(v);
+}
 function renderDrill(){
   const v = $("#view-drill");
   if (drill && drill.mode === "passage" && pas && !drill.empty){ renderPassage(v); return; }
+  if (drill && drill.mode === "fill" && fil && !drill.empty){ renderFill(v); return; }
   if (!drill){
     setMood("idle", "drillmenu");
     const nEx = WORDS.filter(w => w.ex && w.ex.code).length;
@@ -947,6 +1045,7 @@ function renderDrill(){
         <li><button type="button" class="mode" data-drill="go" data-mode="cloze"><b>詞彙題模擬</b><span>例句挖一個空格，四個詞性相同的選項，跟學測詞彙題一樣考「哪個字放進句子才通」。題庫 ${nEx} 句。</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="spell"><b>拼字</b><span>看中文拼出英文，練中譯英和作文用得到的字。${nLearned ? `從學過的 ${nLearned} 個字出題。` : "還沒學過字的話，會先從起始級數出題。"}</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="passage"><b>克漏字</b><span>一篇短文 5 個空格，照學測綜合測驗出：詞彙、片語、轉承詞、文法都有，每格附解析。共 ${PASS.length} 篇。</span></button></li>
+        ${FILL.length ? `<li><button type="button" class="mode" data-drill="go" data-mode="fill"><b>文意選填</b><span>一篇短文 10 個空格、10 個選項，每個字只用一次，跟學測文意選填一樣。全部填完再交卷看解析。共 ${FILL.length} 篇。</span></button></li>` : ""}
         <li><button type="button" class="mode" data-drill="go" data-mode="weak"${nWeak ? "" : " disabled"}><b>錯字複習</b><span>${nWeak ? `把答錯過的 ${nWeak} 個字裡，錯最多次的再考一輪。` : "還沒有答錯過的字。"}</span></button></li>
       </ul>
       ${state.drills.total ? `<p class="hint">練習累計答對 ${state.drills.right}／${state.drills.total} 題。</p>` : ""}`;
@@ -976,10 +1075,10 @@ function renderDrill(){
         ${answered ? `<div class="wordrow"><p class="enreveal" lang="en">${esc(w.w)}</p>${sayBtn(w.k)}</div>${sensesHtml(w)}${exLine(w)}` : ""}
         ${answered && ok ? SEAL() : ""}
       </article>
-      ${answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "拼對了。" : `你拼的是「${esc(drill.typed)}」，正確是「${esc(w.k)}」。`}</p>${nextBtn}`
+      ${answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "拼對了。" : drill.typed ? `你拼的是「${esc(drill.typed)}」，正確是「${esc(w.k)}」。` : `正確是「${esc(w.k)}」，下次再挑戰。`}</p>${nextBtn}`
         : `<div class="spell"><label class="vh" for="spellIn">輸入英文拼字</label><input id="spellIn" class="field" lang="en" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
-           <button class="btn primary" type="button" data-drill="check">確定</button></div>
-           <p class="hint">不會的話直接按確定看答案。</p>`}`;
+           <button class="btn skip" type="button" data-drill="skip">跳過</button><button class="btn primary" type="button" data-drill="check">確定</button></div>
+           <p class="hint">不會的話按「跳過」看答案。</p>`}`;
     hookImgs(v); return;
   }
   const ok = q.picked === q.id;
@@ -1200,7 +1299,7 @@ function renderSet(){
   $("#sSay").hidden = !canSay;
   $("#sayHint").textContent = canSay ? "" : "這個瀏覽器不支援發音。";
   $("#resetBtn").textContent = resetArmed ? "再按一次確認重設" : "重設進度";
-  renderSync();
+  renderSync(); $("#lastBackup").textContent = lastBackupText();
   if (!renderSet.opened){ renderSet.opened = true; const g = isAndroid() ? $("#guideAndroid") : isIOS() ? $("#guideIOS") : null; if (g) g.open = true; }
 }
 function exportBackup(){
@@ -1211,7 +1310,7 @@ function exportBackup(){
     a.download = `學測金榜備份-${dayKey(dayNum())}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    $("#backupNote").textContent = "已下載備份檔。";
+    markBackup(); $("#backupNote").textContent = "已下載備份檔。";
   } catch (e) { $("#backupNote").textContent = "這個瀏覽器沒辦法下載檔案。"; }
 }
 /* 備份文字：GSATJB1: + gzip + base64；不支援壓縮時用 GSATJB0: + base64 */
@@ -1243,13 +1342,37 @@ function adoptBackup(data){
   rebuild(); ensureToday(); sanitizeToday(); cur = null; save(); applyTheme(); applySkin(); renderAll();
   $("#backupNote").textContent = `還原完成：${Object.keys(state.prog).length} 個字的進度、${state.xp} 分。`;
 }
-async function copyBackup(){
+async function copyBackup(fromToday){
   const note = $("#backupNote");
+  const say = t => { note.textContent = t; if (fromToday){ ui.bkMsg = t; renderToday(); } };
   try {
     const t = await makeBackupText();
-    try { await navigator.clipboard.writeText(t); note.textContent = `已複製備份文字（${Math.ceil(t.length / 1024)} KB）。貼到 LINE Keep 或備忘錄存起來。`; }
-    catch (e) { const ta = $("#restoreText"); ta.value = t; ta.closest("details").open = true; ta.select(); note.textContent = "這個瀏覽器不能自動複製，備份文字已經放在下方的框裡，請長按全選後複製。"; }
-  } catch (e) { note.textContent = "產生備份文字失敗，請改用下載備份檔。"; }
+    try { await navigator.clipboard.writeText(t); markBackup(); say(`已複製備份文字（${Math.ceil(t.length / 1024)} KB）。貼到 LINE Keep 或備忘錄存起來。`); }
+    catch (e) {
+      if (fromToday){ ui.bkMsg = ""; showTab("set"); }
+      const ta = $("#restoreText"); ta.value = t; ta.closest("details").open = true; ta.select(); markBackup(); note.textContent = "這個瀏覽器不能自動複製，備份文字已經放在下方的框裡，請長按全選後複製。";
+    }
+  } catch (e) { say("產生備份文字失敗，請到「設定」改用下載備份檔。"); }
+}
+function markBackup(){ state.backupAt = Date.now(); state.backupSnooze = null; save(); const el = $("#lastBackup"); if (el) el.textContent = lastBackupText(); }
+function lastBackupText(){
+  if (!state.backupAt) return "還沒備份過。之後每 7 天會在「今日」提醒一次。";
+  const d = new Date(state.backupAt), n = Math.floor((Date.now() - state.backupAt) / 86400000);
+  return `上次備份：${d.getMonth() + 1}/${d.getDate()}（${n ? n + " 天前" : "今天"}）。每 7 天會在「今日」提醒一次。`;
+}
+function backupDue(){
+  if (cloudState === "on" && state.sync && state.sync.code) return 0;
+  if (Object.keys(state.prog).length < 10) return 0;
+  if (state.backupSnooze === dayNum()) return 0;
+  if (!state.backupAt) return -1;
+  const n = Math.floor((Date.now() - state.backupAt) / 86400000);
+  return n >= 7 ? n : 0;
+}
+function backupCard(){
+  if (ui.bkMsg) return `<div class="remind" role="status"><p>${esc(ui.bkMsg)}</p></div>`;
+  const n = backupDue(); if (!n) return "";
+  return `<div class="remind"><p><b>${n < 0 ? "還沒備份過進度" : `已經 ${n} 天沒備份了`}</b>　換手機或清除瀏覽器資料時，沒備份的進度會不見。複製一段備份文字貼到 LINE Keep 就好。</p>
+    <div class="actions row"><button class="btn small primary" type="button" data-bk="copy">複製備份文字</button><button class="btn small" type="button" data-bk="later">今天先不要</button></div></div>`;
 }
 async function restoreFromText(){
   const note = $("#backupNote");
@@ -1276,6 +1399,7 @@ function renderAll(){
 }
 function showTab(t){
   if (test) return;
+  ui.bkMsg = "";
   ["today", "drill", "lib", "log", "set"].forEach(k => { $("#view-" + k).hidden = k !== t; });
   document.querySelectorAll("[data-tab]").forEach(b => { if (b.dataset.tab === t) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   if (t === "today") renderToday();
@@ -1311,15 +1435,20 @@ document.addEventListener("click", e => {
     else if (a === "ok" && test) confirmTest();
     return;
   }
+  const fl = e.target.closest("[data-fill]");
+  if (fl){ fillAct(fl.dataset.fill, fl.dataset.i); return; }
+  const bk = e.target.closest("[data-bk]");
+  if (bk){ if (bk.dataset.bk === "copy") copyBackup(true); else { state.backupSnooze = dayNum(); save(); renderToday(); } return; }
   const pb = e.target.closest("[data-pas]");
   if (pb){ if (pb.dataset.pas === "pick") passagePick(pb.dataset.v); else if (pb.dataset.pas === "next") passageNext(); return; }
   const db = e.target.closest("[data-drill]");
   if (db){
     const a = db.dataset.drill;
     if (a === "go") startDrill(db.dataset.mode);
-    else if (a === "menu"){ drill = null; pas = null; renderDrill(); }
+    else if (a === "menu"){ drill = null; pas = null; fil = null; renderDrill(); }
     else if (a === "pick") drillPick(db.dataset.id);
     else if (a === "check") drillCheckSpell();
+    else if (a === "skip") drillCheckSpell(true);
     else if (a === "next") drillNext();
     return;
   }
@@ -1436,8 +1565,9 @@ async function load(){
       getJSON("examples.json").catch(() => ({})),
       getJSON("chars.json").catch(() => null),
       getJSON("config.json").catch(() => null),
-      getJSON("passages.json").catch(() => [])
-    ]).then(r => { const cfg = r[3]; CFG = cfg; PASS = Array.isArray(r[4]) ? r[4] : []; if (cfg && cfg.firebase && cfg.firebase.apiKey) FB_CFG = cfg.firebase; if (cfg && Array.isArray(cfg.rankXp) && cfg.rankXp.length) RANK_XP = cfg.rankXp.map(x => Math.max(0, +x || 0)).sort((a, b) => a - b); if (cfg && Array.isArray(cfg.ranks) && cfg.ranks.length){
+      getJSON("passages.json").catch(() => []),
+      getJSON("fill.json").catch(() => [])
+    ]).then(r => { const cfg = r[3]; CFG = cfg; PASS = Array.isArray(r[4]) ? r[4] : []; FILL = Array.isArray(r[5]) ? r[5] : []; if (cfg && cfg.firebase && cfg.firebase.apiKey) FB_CFG = cfg.firebase; if (cfg && Array.isArray(cfg.rankXp) && cfg.rankXp.length) RANK_XP = cfg.rankXp.map(x => Math.max(0, +x || 0)).sort((a, b) => a - b); if (cfg && Array.isArray(cfg.ranks) && cfg.ranks.length){
         const rk = cfg.ranks.filter(x => x && x.name).map(x => [String(x.name), Math.max(0, +x.xp || 0)]).sort((a, b) => a[1] - b[1]);
         if (rk.length){ rk[0][1] = 0; BASE_RANKS = rk; } } return r; });
     EX = ex || {};

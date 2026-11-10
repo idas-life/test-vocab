@@ -137,6 +137,7 @@ h3.sub{font-size:1.2rem;margin:2rem 0 .7rem;letter-spacing:.04em}
 /* spelling */
 .spell{display:flex;gap:.5rem;margin-top:1rem}
 .spell input{flex:1;min-width:0;font-family:var(--en);font-size:1.3rem;letter-spacing:.04em}
+.spell .btn{flex:none;min-width:0;padding-left:1.1rem;padding-right:1.1rem}.spell .btn.primary{min-width:5.5rem}
 .hintline{font-family:var(--en);letter-spacing:.25em;font-size:1.25rem;margin:.8rem 0 0}
 
 /* done */
@@ -425,3 +426,30 @@ h3.sub{color:var(--deep);font-weight:400}
 #credits .me{border-top:2px dotted var(--rim);margin-top:.9rem}
 #credits .me summary{cursor:pointer;padding:.55rem 0;color:var(--deep);font-size:1rem}
 #credits .me p{font-size:.9rem;margin:.3rem 0}
+
+/* 備份提醒 */
+.remind{margin:0 0 1.1rem;padding:.85rem 1rem;border:2.5px dashed var(--seal);border-radius:18px;background:var(--card)}
+.remind p{margin:0 0 .6rem;line-height:1.6;font-size:.95rem}
+.remind p:last-child{margin-bottom:0}
+.remind b{color:var(--seal)}
+.remind .actions{margin:0}
+
+/* 文意選填 */
+.fgap{display:inline-flex;align-items:baseline;gap:.25rem;min-width:2.6rem;justify-content:center;font:inherit;font-size:.85rem;line-height:1.35;color:var(--ink-soft);
+  background:none;border:0;border-bottom:2.5px solid var(--ink-soft);margin:0 .1rem;padding:0 .35rem;cursor:pointer;vertical-align:baseline}
+.fgap b{font-family:var(--zh);font-size:.75rem;color:var(--deep)}
+.fgap.filled{color:var(--ink);font-size:1rem;border-bottom-color:var(--gold)}
+.fgap.cur{background:var(--soft);border-bottom-color:var(--deep);color:var(--deep);border-radius:6px 6px 0 0;font-weight:700}
+.fgap.ok{border-bottom-color:var(--celadon);color:var(--celadon);font-size:1rem;cursor:default}
+.fgap.no{border-bottom-color:var(--seal);color:var(--seal);font-size:1rem;cursor:default}
+.fbank{position:sticky;bottom:calc(5.2rem + env(safe-area-inset-bottom,0px));z-index:5;background:var(--paper);margin:1rem -.4rem .8rem;padding:.5rem .4rem .5rem;border-radius:18px 18px 0 0;box-shadow:0 -6px 12px -8px rgba(0,0,0,.25)}
+.fbank .ask{margin:0 0 .4rem;font-size:.95rem}
+.fbank .hint{margin:.5rem 0}
+.fwords{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.3rem .4rem}
+@media (min-width:560px){.fwords{grid-template-columns:repeat(5,minmax(0,1fr))}}
+.fword{width:100%;display:flex;align-items:center;gap:.3rem;font-family:var(--en);font-size:.95rem;text-align:left;padding:.28rem .55rem;overflow:hidden;white-space:nowrap;background:var(--card);
+  border:2px solid var(--rim);border-radius:14px;box-shadow:0 2px 0 var(--rim);cursor:pointer;color:var(--ink)}
+.fword .key{font-family:var(--zh);font-size:.72rem;color:var(--deep);flex:none}
+.fword small{margin-left:auto;font-family:var(--zh);font-size:.7rem;color:var(--ink-soft);flex:none}
+.fword.used{opacity:.45;box-shadow:none}
+.fword:active{transform:translateY(1px)}
