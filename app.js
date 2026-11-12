@@ -3,11 +3,12 @@
 
 /* ---------- constants ---------- */
 const EXAM_DAY_DATE = new Date(2027, 0, 22);           // 116 學測第一天
-let BASE_RANKS = [["小蛋糕",0],["小蘋果",2000],["寶貝妹妹",8000]], RANK_XP = [0,500,1500,3000,5000,8000,12000,17000,23000,30000];
+let BASE_RANKS = [["小蛋糕",0],["小蘋果",2000],["寶貝妹妹",8000]], RANK_XP = [0,400,1100,3500,8000,16000,27000,40000,55000,72000];
+const OLD_RANK_XP = [0,500,1500,3000,5000,8000,12000,17000,23000,30000];
 function RANKS_(){
   const c = charObj(document.documentElement.getAttribute("data-skin") || undefined);
   if (c && Array.isArray(c.ranks) && c.ranks.length){
-    return c.ranks.map((name, i) => [String(name), i < RANK_XP.length ? RANK_XP[i] : RANK_XP[RANK_XP.length - 1] + (i - RANK_XP.length + 1) * 8000]);
+    return c.ranks.map((name, i) => [String(name), i < RANK_XP.length ? RANK_XP[i] : RANK_XP[RANK_XP.length - 1] + (i - RANK_XP.length + 1) * 20000]);
   }
   return BASE_RANKS;
 }
@@ -186,6 +187,10 @@ async function redeem(raw){
   if (!code){ msg.textContent = "請輸入兌換碼。"; return; }
   if (!(window.crypto && crypto.subtle)){ msg.textContent = "這個瀏覽器不支援解鎖，請用 Safari 或 Chrome 打開網址。"; return; }
   msg.textContent = "確認中……";
+  if (await sha256Hex(code) === HS_HASH){
+    $("#redeemIn").value = ""; enterHs();
+    msg.textContent = "解鎖了「同等學力」，已經切換過去。之後可以在這裡的「字庫」切回單字。"; return;
+  }
   for (const meta of PACKS){
     if (!meta.locked || PACK_WORDS[meta.id]) continue;
     try {
@@ -207,7 +212,33 @@ function switchPack(id){
 }
 function status(id){ const p = state.prog[id]; if (!p || p[0] === 0) return 0; return p[0] >= MASTER_BOX ? 2 : 1; }
 function isWeak(id){ const p = state.prog[id]; return !!p && p[2] - p[3] >= 2; }
-function rankIndex(xp){ let i = 0; RANKS_().forEach((r, k) => { if (xp >= r[1]) i = k; }); return i; }
+function rankIndex(xp, raw){
+  const R = RANKS_(); let i = 0; R.forEach((r, k) => { if (xp >= r[1]) i = k; });
+  return raw ? i : Math.max(i, Math.min(state.rankMax || 0, R.length - 1));
+}
+/* 一天內分數遞減：前 600 分全額，600～1200 打五折，1200 以上打兩折，隔天重算 */
+const XP_TIERS = [[600, 1], [1200, 0.5], [Infinity, 0.2]];
+function xpCurve(x){ let out = 0, lo = 0; for (const [hi, r] of XP_TIERS){ if (x <= lo) break; out += (Math.min(x, hi) - lo) * r; lo = hi; } return out; }
+function effXp(n){
+  const d = dayNum();
+  if (!state.dayXp || state.dayXp.d !== d) state.dayXp = { d, raw:0 };
+  const a = state.dayXp.raw, b = a + n; state.dayXp.raw = b;
+  return Math.round(xpCurve(b)) - Math.round(xpCurve(a));
+}
+function xpNote(){
+  const raw = state.dayXp && state.dayXp.d === dayNum() ? state.dayXp.raw : 0;
+  if (raw <= 600) return "";
+  return `<p class="hint">今天已經拿了很多分，之後的分數會打折（600～1,200 分五折、1,200 分以上兩折），明天就恢復。</p>`;
+}
+function migrateRanks(){
+  if (state.rankV === 2) return;
+  const c = charObj();
+  if (c && Array.isArray(c.ranks) && c.ranks.length){
+    let i = 0; c.ranks.forEach((_, k) => { const t = k < OLD_RANK_XP.length ? OLD_RANK_XP[k] : OLD_RANK_XP[OLD_RANK_XP.length - 1] + (k - OLD_RANK_XP.length + 1) * 8000; if (state.xp >= t) i = k; });
+    state.rankMax = Math.max(state.rankMax || 0, i);
+  }
+  state.rankV = 2; save();
+}
 function motifs(){ const c = charObj(document.documentElement.getAttribute("data-skin") || undefined); return (c && Array.isArray(c.motifs) && c.motifs.length) ? c.motifs : ["star","heart","flower"]; }
 function deco(n, cls){ const m = motifs(); return `<span class="stk ${cls || ""}" aria-hidden="true">${sticker(m[(n || 0) % m.length])}</span>`; }
 const SEAL = () => `<div class="seal" aria-hidden="true">${sticker("star")}<b>棒</b></div>`;
@@ -221,7 +252,14 @@ function renderBunting(){
   }
   el.innerHTML = `<svg viewBox="0 0 400 50" preserveAspectRatio="none" width="100%" height="100%"><path d="M0 6 Q200 54 400 6" fill="none" stroke="${OUTLINE}" stroke-width="2"/><g stroke="${OUTLINE}" stroke-width="2" stroke-linejoin="round">${tri}</g></svg>`;
 }
-function addXp(n){ const before = rankIndex(state.xp); state.xp = Math.max(0, state.xp + n); if (rankIndex(state.xp) > before){ pulsePlaque = true; return true; } return false; }
+let lastGain = 0;
+function addXp(n){
+  if (n > 0) n = effXp(n);
+  lastGain = n;
+  const before = rankIndex(state.xp); state.xp = Math.max(0, state.xp + n);
+  const now = rankIndex(state.xp, true); if (now > (state.rankMax || 0)) state.rankMax = now;
+  if (rankIndex(state.xp) > before){ pulsePlaque = true; return true; } return false;
+}
 
 function freshPool(exclude){ return WORDS.filter(w => !state.prog[w.id] && !(exclude && exclude.has(w.id))); }
 function pickNew(n, exclude){
@@ -747,7 +785,7 @@ function renderTodayInner(){
       <div><dt>今日得分</dt><dd>+${T.xp}</dd></div>
       <div><dt>連續</dt><dd>${live}<small>日</small></dd></div>
     </dl>
-    <p>${T.bonus ? `完成今日功課，加 ${T.bonus} 分。` : ""}明天再回來，連續紀錄就會接下去。</p>
+    <p>${T.bonus ? `完成今日功課，加 ${T.bonus} 分。` : ""}明天再回來，連續紀錄就會接下去。</p>${xpNote()}
     <div class="actions row">${moreN ? `<button class="btn" type="button" data-act="more">再學 ${moreN} 個新字</button>` : ""}
     <button class="btn" type="button" data-tab-go="drill">去做詞彙題</button></div>`;
   hookImgs(v);
@@ -764,7 +802,7 @@ function answer(pickId){
     gain = grade(q.id, ok, T.day);
     if (ok) T.right++; else { T.queue.push({ id:q.id, retry:true }); (T.wrong = T.wrong || []).push(q.id); }
   } else if (ok) gain = 3;
-  addXp(gain); T.xp += gain;
+  addXp(gain); T.xp += lastGain;
   setMood(ok ? "happy" : "sad", "a-" + T.day + "-" + T.pos);
   save(); renderHeader(); renderToday();
   const nb = $('[data-act="next"]'); if (nb && kbd) nb.focus({ preventScroll:true });
@@ -786,6 +824,7 @@ function finish(){
     state.best = Math.max(state.best || 0, state.streak);
     const bonus = 20 + Math.min(state.streak, 10) * 3;
     state.xp += bonus; T.xp += bonus; T.bonus = bonus;
+    { const now = rankIndex(state.xp, true); if (now > (state.rankMax || 0)) state.rankMax = now; }
   }
   state.history[dayKey(T.day)] = T.xp;
   const keys = Object.keys(state.history).sort();
@@ -853,7 +892,7 @@ function acceptable(w){
 function drillResult(ok){
   const q = drill.q, before = rankIndex(state.xp);
   state.drills.total++;
-  if (ok){ drill.right++; state.drills.right++; addXp(DRILL_XP); credit(q.id); }
+  if (ok){ drill.right++; state.drills.right++; addXp(DRILL_XP); drill.gain = (drill.gain || 0) + lastGain; credit(q.id); }
   else { lapse(q.id); drill.wrong.push(q.id); }
   setMood(ok ? "happy" : "sad", "dr-" + drill.mode + "-" + drill.pos);
   if (rankIndex(state.xp) > before){ ui.line = pick(linesFor("rankup")); }
@@ -913,7 +952,7 @@ function passagePick(opt){
   const q = pas.p.qs[pas.pos], ok = opt === q.a;
   pas.picks[pas.pos] = opt; pas.last = opt;
   state.drills.total++;
-  if (ok){ state.drills.right++; addXp(DRILL_XP); if (q.word) credit(q.word); }
+  if (ok){ state.drills.right++; addXp(DRILL_XP); pas.gain = (pas.gain || 0) + lastGain; if (q.word) credit(q.word); }
   else if (q.word){ if (state.prog[q.word]) lapse(q.word); else state.prog[q.word] = [1, dayNum() + 1, 1, 0]; }
   setMood(ok ? "happy" : "sad", "pp-" + pas.p.id + "-" + pas.pos);
   save(); renderHeader(); renderDrill();
@@ -937,7 +976,7 @@ function renderPassage(v){
     const review = p.qs.map((q, i) => { const ok = pas.picks[i] === q.a;
       return `<li class="${ok ? "ok" : "no"}"><b>${i + 1}. ${esc(q.a)}</b><span class="tag">${TYPE_NAME[q.type] || q.type}</span>${ok ? "" : `<span class="yours">你選 ${esc(pas.picks[i])}</span>`}<p class="hint">${esc(q.why)}</p></li>`; }).join("");
     v.innerHTML = buddyHtml("bounce") + `<h2>克漏字結束</h2>
-      <dl class="result"><div><dt>答對</dt><dd>${pas.right}<small>／${n}</small></dd></div><div><dt>得分</dt><dd>+${pas.right * DRILL_XP}</dd></div><div><dt>用時</dt><dd>${Math.max(1, Math.round((Date.now() - pas.t0) / 60000))}<small>分</small></dd></div></dl>
+      <dl class="result"><div><dt>答對</dt><dd>${pas.right}<small>／${n}</small></dd></div><div><dt>得分</dt><dd>+${pas.gain || 0}</dd></div><div><dt>用時</dt><dd>${Math.max(1, Math.round((Date.now() - pas.t0) / 60000))}<small>分</small></dd></div></dl>${xpNote()}
       <article class="card passage">${deco(1, "stk-card")}<h3 class="ptitle" lang="en">${esc(p.title)}</h3><p class="ptext" lang="en">${passageText()}</p></article>
       <h3 class="sub">逐題解析</h3><ol class="review">${review}</ol>
       <div class="actions row"><button class="btn primary" type="button" data-drill="go" data-mode="passage">再做一篇</button>
@@ -997,7 +1036,7 @@ function fillSubmit(){
   p.blanks.forEach((b, i) => {
     const got = fil.put[i] == null ? null : fil.bank[fil.put[i]], ok = got === b.a;
     state.drills.total++;
-    if (ok){ r++; state.drills.right++; addXp(DRILL_XP); credit(b.word); }
+    if (ok){ r++; state.drills.right++; addXp(DRILL_XP); fil.gain = (fil.gain || 0) + lastGain; credit(b.word); }
     else { wrong.push(b.word); if (state.prog[b.word]) lapse(b.word); else state.prog[b.word] = [1, dayNum() + 1, 1, 0]; }
   });
   fil.done = true; fil.right = r;
@@ -1029,7 +1068,7 @@ function renderFill(v){
     const review = p.blanks.map((b, i) => { const got = fil.put[i] == null ? null : fil.bank[fil.put[i]], ok = got === b.a, L = LETTERS[fil.bank.indexOf(b.a)];
       return `<li class="${ok ? "ok" : "no"}"><b lang="en">${i + 1}. (${L}) ${esc(b.a)}</b>${ok ? "" : `<span class="yours">${got ? `你填 ${esc(got)}` : "沒填"}</span>`}<p class="hint">${esc(b.why)}</p></li>`; }).join("");
     v.innerHTML = buddyHtml(fil.right >= 7 ? "bounce" : "shake") + `<h2>文意選填結束</h2>
-      <dl class="result"><div><dt>答對</dt><dd>${fil.right}<small>／${n}</small></dd></div><div><dt>得分</dt><dd>+${fil.right * DRILL_XP}</dd></div><div><dt>用時</dt><dd>${Math.max(1, Math.round((Date.now() - fil.t0) / 60000))}<small>分</small></dd></div></dl>
+      <dl class="result"><div><dt>答對</dt><dd>${fil.right}<small>／${n}</small></dd></div><div><dt>得分</dt><dd>+${fil.gain || 0}</dd></div><div><dt>用時</dt><dd>${Math.max(1, Math.round((Date.now() - fil.t0) / 60000))}<small>分</small></dd></div></dl>${xpNote()}
       <article class="card passage">${deco(2, "stk-card")}<h3 class="ptitle" lang="en">${esc(p.title)}</h3><p class="ptext" lang="en">${fillText()}</p></article>
       <h3 class="sub">逐格解析</h3><ol class="review">${review}</ol>
       <div class="actions row"><button class="btn primary" type="button" data-drill="go" data-mode="fill">再做一篇</button>
@@ -1072,7 +1111,7 @@ function renderDrill(){
   }
   if (drill.finished){
     v.innerHTML = buddyHtml("bounce") + `<h2>${MODE_NAME[drill.mode]}結束</h2>
-      <dl class="result"><div><dt>答對</dt><dd>${drill.right}<small>／${drill.ids.length}</small></dd></div><div><dt>得分</dt><dd>+${drill.right * DRILL_XP}</dd></div><div><dt>累計</dt><dd>${state.drills.right}<small>題</small></dd></div></dl>
+      <dl class="result"><div><dt>答對</dt><dd>${drill.right}<small>／${drill.ids.length}</small></dd></div><div><dt>得分</dt><dd>+${drill.gain || 0}</dd></div><div><dt>累計</dt><dd>${state.drills.right}<small>題</small></dd></div></dl>${xpNote()}
       <div class="actions row"><button class="btn primary" type="button" data-drill="go" data-mode="${drill.mode}">再一輪</button>
       <button class="btn" type="button" data-drill="menu">回練習選單</button></div>`;
     hookImgs(v); return;
@@ -1248,7 +1287,7 @@ async function cloudInit(){
 function adoptRemote(json, code){
   const remote = normalize(JSON.parse(json));
   remote.sync = { code };
-  state = remote; rebuild(); ensureToday(); sanitizeToday(); cur = null;
+  state = remote; rebuild(); migrateRanks(); ensureToday(); sanitizeToday(); cur = null;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
   applyTheme(); applySkin(); renderAll();
 }
@@ -1294,8 +1333,9 @@ function renderSet(){
   const s = state.settings;
   const unlocked = PACKS.filter(p => PACK_WORDS[p.id]);
   $("#packGroup").hidden = false;
-  $("#sPack").innerHTML = unlocked.map(p => `<button type="button" data-v="${esc(p.id)}" aria-pressed="${p.id === curPackId()}">${esc(p.name)}</button>`).join("");
-  $("#sPack").hidden = unlocked.length < 2;
+  const hsU = !!(state.hs && state.hs.ok);
+  $("#sPack").innerHTML = unlocked.map(p => `<button type="button" data-v="${esc(p.id)}" aria-pressed="${!hsOn() && p.id === curPackId()}">${esc(p.name)}</button>`).join("") + (hsU ? `<button type="button" data-v="hs" aria-pressed="${hsOn()}">同等學力</button>` : "");
+  $("#sPack").hidden = unlocked.length + (hsU ? 1 : 0) < 2;
   $("#startGroup").hidden = !isGsat();
   const ps = $("#packStart"), PLs = packLevels();
   ps.hidden = isGsat() || PLs.length < 2;
@@ -1354,7 +1394,7 @@ function adoptBackup(data){
   if (!data || typeof data !== "object" || !data.prog) throw new Error("bad");
   const keepSync = state.sync;
   state = normalize(data); if (!state.sync || !state.sync.code) state.sync = keepSync;
-  rebuild(); ensureToday(); sanitizeToday(); cur = null; save(); applyTheme(); applySkin(); renderAll();
+  rebuild(); migrateRanks(); ensureToday(); sanitizeToday(); cur = null; save(); applyTheme(); applySkin(); renderAll();
   $("#backupNote").textContent = `還原完成：${Object.keys(state.prog).length} 個字的進度、${state.xp} 分。`;
 }
 async function copyBackup(fromToday){
@@ -1404,6 +1444,200 @@ function importBackup(file){
   r.readAsText(file);
 }
 
+
+/* ---------- 同等學力（兌換碼解鎖） ---------- */
+const HS_HASH = "7bf275b84f0bd4ba721067c37c9f6f575137d8425bfda500f1185fa61edb4eb2";
+const HS_FILES = ["hs/115.json"];
+const HS_LETTERS = "ABCD";
+let HS = null, hsv = { page:"home", sub:null, run:null };
+const hsOn = () => !!(state.hs && state.hs.ok && state.hs.on);
+function hsState(){
+  if (!state.hs || typeof state.hs !== "object") state.hs = {};
+  const h = state.hs;
+  if (!h.ans || typeof h.ans !== "object") h.ans = {};
+  if (!Array.isArray(h.wrong)) h.wrong = [];
+  if (!h.essay || typeof h.essay !== "object") h.essay = {};
+  if (!Array.isArray(h.runs)) h.runs = [];
+  return h;
+}
+async function sha256Hex(s){
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+async function hsLoad(){
+  if (HS) return HS;
+  const exams = [];
+  for (const f of HS_FILES){ try { exams.push(await getJSON(f)); } catch (e) {} }
+  const subs = {};
+  exams.forEach(ex => ex.subjects.forEach(s => {
+    const o = subs[s.id] || (subs[s.id] = { id:s.id, name:s.name, qs:[], papers:[] });
+    o.papers.push({ year:ex.year, title:ex.title, mins:s.mins, secs:s.secs, ids:s.qs.map(q => q.id) });
+    s.qs.forEach(q => { q.year = ex.year; q.secName = (s.secs[q.sec] || {}).name || ""; q.pts = (s.secs[q.sec] || {}).pts || 0; q.subName = s.name; o.qs.push(q); });
+  }));
+  const order = ["chi", "eng", "math", "nat", "soc"];
+  HS = { subs:order.filter(k => subs[k]).map(k => subs[k]), byId:new Map() };
+  HS.subs.forEach(s => s.qs.forEach(q => HS.byId.set(q.id, q)));
+  return HS;
+}
+function applyHsMode(){
+  document.body.classList.toggle("hs", hsOn());
+  if (hsOn()){ if ($("#view-hs").hidden && $("#view-set").hidden) showTab("hs"); }
+  else if (!$("#view-hs").hidden) showTab("today");
+}
+function enterHs(){ hsState().ok = true; state.hs.on = true; save(); applyHsMode(); showTab("hs"); }
+function leaveHs(){ if (state.hs) state.hs.on = false; save(); applyHsMode(); }
+function hsLines(mood){
+  const c = charObj(), base = (c && c.lines && c.lines[mood]) || [];
+  const L = base.filter(s => !/字|單字|稱號|背|英文|多益|托福|學測/.test(s));
+  const D = { idle:["一題一題來，不用急。"], happy:["答對了，很好。"], sad:["錯了沒關係，記下來就好。"], done:["這一回做完了，辛苦了。"], rankup:["做得很好。"] };
+  return L.length ? L : (D[mood] || D.idle);
+}
+function hsStat(qs){
+  const A = hsState().ans; let done = 0, right = 0;
+  qs.forEach(q => { const a = A[q.id]; if (a){ done++; if (a[2]) right++; } });
+  return { done, right, n:qs.length };
+}
+function hsGradable(q){ return q.t === "mc" || q.t === "fill"; }
+function hsNorm(s){
+  return String(s || "").normalize("NFKC").toLowerCase().replace(/\s+/g, "").replace(/[−–—－]/g, "-")
+    .replace(/根號|sqrt/g, "√").replace(/[()（）]/g, "").replace(/^\+/, "");
+}
+function hsCheck(q, v){ if (q.t === "mc") return v === q.a; const n = hsNorm(v); return !!n && q.acc.some(a => hsNorm(a) === n); }
+
+function hsStart(kind){
+  const s = HS.subs.find(x => x.id === hsv.sub); if (!s) return;
+  let ids = [];
+  if (kind === "paper") ids = s.papers[0].ids.filter(id => hsGradable(HS.byId.get(id)));
+  else if (kind === "rand") ids = shuffle(s.qs.filter(hsGradable).map(q => q.id)).slice(0, 10);
+  else if (kind === "wrong") ids = shuffle(hsState().wrong.filter(id => HS.byId.has(id) && HS.byId.get(id).subName === s.name));
+  if (!ids.length) return;
+  hsv.run = { kind, ids, pos:0, picks:{}, t0:Date.now() };
+  hsv.page = "q";
+  setMood("idle", "hs-" + kind + "-" + Date.now());
+  renderHs(); window.scrollTo(0, 0);
+}
+function hsAnswer(v){
+  const R = hsv.run, id = R.ids[R.pos], q = HS.byId.get(id);
+  if (!q || R.picks[id] !== undefined) return;
+  R.picks[id] = v;
+  const ok = hsCheck(q, v), h = hsState(), a = h.ans[id] || [0, 0, 0];
+  a[0]++; if (ok) a[1]++; a[2] = ok ? 1 : 0; h.ans[id] = a;
+  const wi = h.wrong.indexOf(id);
+  if (ok && wi >= 0 && R.kind === "wrong") h.wrong.splice(wi, 1);
+  if (!ok && wi < 0) h.wrong.push(id);
+  setMood(ok ? "happy" : "sad", "hsa-" + id + "-" + Date.now());
+  save(); renderHs();
+  if (kbd){ const nb = $('[data-hs="next"]'); if (nb) nb.focus({ preventScroll:true }); }
+}
+function hsNext(){
+  const R = hsv.run; R.pos++;
+  if (R.pos >= R.ids.length){
+    hsv.page = "result";
+    const right = R.ids.filter(id => hsCheck(HS.byId.get(id), R.picks[id])).length;
+    const h = hsState(); h.runs.push({ t:Date.now(), sub:hsv.sub, k:R.kind, n:R.ids.length, r:right }); if (h.runs.length > 200) h.runs.splice(0, h.runs.length - 200);
+    setMood(right / R.ids.length >= 0.6 ? "done" : "sad", "hsdone-" + Date.now());
+    save();
+  } else setMood("idle", "hsq-" + R.ids[R.pos]);
+  renderHs(); window.scrollTo(0, 0);
+}
+function hsBuddy(anim){
+  const keep = ui.line;
+  if (!ui.hsLineKey || ui.hsLineKey !== ui.lineKey){ ui.hsLine = pick(hsLines(ui.mood)); ui.hsLineKey = ui.lineKey; }
+  ui.line = ui.hsLine; const h = buddyHtml(anim); ui.line = keep; return h;
+}
+function hsQHtml(q, answered){
+  const img = q.img ? `<a class="qimgl" href="${esc(q.img)}" target="_blank" rel="noopener"><img class="qimg" src="${esc(q.img)}" alt="題目附圖（點一下放大）" loading="lazy"></a><p class="hint imgtip">圖看不清楚可以點一下放大。</p>` : "";
+  return `<div class="hsq" ${q.subName === "英文" ? 'lang="en"' : ""}><p class="hsstem"><b class="qn">${q.n}.</b>${q.q}</p>${img}</div>`;
+}
+function renderHs(){
+  const v = $("#view-hs");
+  if (!state.hs || !state.hs.ok){ v.innerHTML = ""; return; }
+  if (!HS){ v.innerHTML = `<p class="hint">正在載入考古題……</p>`; hsLoad().then(() => renderHs()); return; }
+  const h = hsState();
+  if (hsv.page === "home" || !hsv.sub){
+    setMood("idle", "hs-home");
+    const cards = HS.subs.map(s => { const st = hsStat(s.qs.filter(hsGradable)), w = h.wrong.filter(id => (HS.byId.get(id) || {}).subName === s.name).length;
+      return `<li><button type="button" class="hssub" data-hs="sub" data-v="${s.id}"><b>${esc(s.name)}</b><span>${st.n} 題・做過 ${st.done}${st.done ? `・答對 ${Math.round(st.right / st.done * 100)}%` : ""}${w ? `・錯題 ${w}` : ""}</span></button></li>`; }).join("");
+    v.innerHTML = hsBuddy("") + `<h2>同等學力・五科考古題</h2>
+      <p class="hint">普通型高中學力鑑定：每科 100 分，60 分及格；也可以五科都達 50 分、平均 60 分通過。官方說歷屆試題約占 4 成，考古題多做幾次很划算。</p>
+      <ul class="hssubs">${cards}</ul>
+      <p class="hint">目前題庫：${HS.subs[0] ? esc(HS.subs[0].papers.map(p => p.year + " 年度").join("、")) : ""}自學進修普通型高級中等學校畢業程度學力鑑定考試（官方公開試題與答案）。</p>`;
+    hookImgs(v); return;
+  }
+  const s = HS.subs.find(x => x.id === hsv.sub);
+  if (hsv.page === "sub"){
+    setMood("idle", "hs-sub-" + s.id);
+    const gq = s.qs.filter(hsGradable), st = hsStat(gq), w = h.wrong.filter(id => (HS.byId.get(id) || {}).subName === s.name).length;
+    const p = s.papers[0], essay = s.qs.find(q => q.t === "essay");
+    const secs = p.secs.map((sc, i) => { const qs = gq.filter(q => q.sec === i); if (!qs.length) return ""; const t = hsStat(qs); return `<li>${esc(sc.name)}：${qs.length} 題，每題 ${sc.pts} 分${t.done ? `，做過 ${t.done} 題、答對 ${t.right}` : ""}</li>`; }).join("");
+    v.innerHTML = hsBuddy("") + `<p class="step"><button type="button" class="linkbtn" data-hs="home">← 五科</button></p><h2>${esc(s.name)}</h2>
+      <ul class="hsinfo">${secs}</ul>
+      <ul class="modes">
+        <li><button type="button" class="mode" data-hs="go" data-v="paper"><b>${p.year} 年度整份</b><span>照考卷順序做完 ${p.ids.filter(id => hsGradable(HS.byId.get(id))).length} 題，最後算分數。正式考試 ${p.mins} 分鐘。</span></button></li>
+        <li><button type="button" class="mode" data-hs="go" data-v="rand"><b>隨機 10 題</b><span>零碎時間用，題目打亂抽。</span></button></li>
+        <li><button type="button" class="mode" data-hs="go" data-v="wrong"${w ? "" : " disabled"}><b>錯題重做</b><span>${w ? `目前有 ${w} 題答錯過，重做答對就會移出錯題本。` : "還沒有答錯的題目。"}</span></button></li>
+        ${essay ? `<li><button type="button" class="mode" data-hs="essay"><b>作文練習</b><span>${p.year} 年度題目：${esc(essay.q.split("<br>")[0].replace("題目：", ""))}。寫的內容會存在這支手機。</span></button></li>` : ""}
+      </ul>`;
+    hookImgs(v); return;
+  }
+  if (hsv.page === "essay"){
+    const e = s.qs.find(q => q.t === "essay"), txt = h.essay[e.id] || "";
+    v.innerHTML = `<p class="step"><button type="button" class="linkbtn" data-hs="back">← ${esc(s.name)}</button></p><h2>作文（40 分）</h2>
+      <article class="card"><p class="hsstem">${e.q}</p></article>
+      <label class="vh" for="hsEssay">作文內容</label><textarea id="hsEssay" data-id="${esc(e.id)}" class="field essay" rows="14" placeholder="先列大綱再寫：開頭點題 → 一件具體經驗 → 你怎麼面對、想通了什麼 → 結尾呼應題目。">${esc(txt)}</textarea>
+      <p class="hint" id="hsCount">${[...txt.replace(/\s/g, "")].length} 字・自動儲存</p>
+      <p class="hint">練習時抓 50 分鐘左右寫完，大約 600～800 字。作文沒辦法自動改，寫完可以給老師或朋友看。</p>`;
+    return;
+  }
+  const R = hsv.run;
+  if (hsv.page === "result"){
+    const qs = R.ids.map(id => HS.byId.get(id)), right = qs.filter(q => hsCheck(q, R.picks[q.id])).length;
+    const pts = R.kind === "paper" ? qs.reduce((t, q) => t + (hsCheck(q, R.picks[q.id]) ? q.pts : 0), 0) : null;
+    const full = R.kind === "paper" ? qs.reduce((t, q) => t + q.pts, 0) : 0;
+    const mins = Math.max(1, Math.round((Date.now() - R.t0) / 60000));
+    const wrongList = qs.filter(q => !hsCheck(q, R.picks[q.id])).map(q => `<li><b>${esc(q.secName)} 第 ${q.n} 題</b>：正確答案 ${q.t === "mc" ? `(${HS_LETTERS[q.a]})` : esc(q.show)}${R.picks[q.id] == null || R.picks[q.id] === "" ? "（沒作答）" : ""}</li>`).join("");
+    v.innerHTML = hsBuddy(right / qs.length >= 0.6 ? "bounce" : "shake") + `<h2>${esc(s.name)}・結果</h2>
+      <dl class="result"><div><dt>答對</dt><dd>${right}<small>／${qs.length}</small></dd></div>${pts != null ? `<div><dt>分數</dt><dd>${Math.round(pts * 10) / 10}<small>／${full}</small></dd></div>` : ""}<div><dt>用時</dt><dd>${mins}<small>分</small></dd></div></dl>
+      ${R.cut ? `<p class="hint">中途結束，分數只算做完的 ${qs.length} 題。</p>` : pts != null && full < 100 ? `<p class="hint">作文 ${100 - full} 分沒有算在裡面。</p>` : ""}
+      ${pts != null && !R.cut ? `<p class="hint">${pts >= 60 * full / 100 ? "已經達到及格線，繼續保持。" : "還沒到及格線（60 分），先把錯題重做一遍。"}</p>` : ""}
+      ${wrongList ? `<h3 class="sub">答錯的題目</h3><ul class="hswrong">${wrongList}</ul>` : ""}
+      <div class="actions row"><button class="btn primary" type="button" data-hs="go" data-v="${R.kind === "wrong" ? "wrong" : "rand"}">${R.kind === "wrong" ? "再練一次錯題" : "再抽 10 題"}</button><button class="btn" type="button" data-hs="back">回${esc(s.name)}</button></div>`;
+    hookImgs(v); return;
+  }
+  const id = R.ids[R.pos], q = HS.byId.get(id), picked = R.picks[id], answered = picked !== undefined, ok = answered && hsCheck(q, picked);
+  let body = "";
+  if (q.t === "mc"){
+    body = `<ul class="opts hsopts">${q.o.map((o, i) => { let cls = "opt" + (q.subName === "英文" ? " en" : ""); if (answered){ if (i === q.a) cls += " right"; else if (i === picked) cls += " wrong"; }
+      return `<li><button type="button" class="${cls}" data-hs="pick" data-v="${i}"${answered ? " disabled" : ""}><span class="key">${HS_LETTERS[i]}</span><span>${o}</span></button></li>`; }).join("")}</ul>`;
+  } else {
+    body = answered ? "" : `<div class="spell"><label class="vh" for="hsIn">答案</label><input id="hsIn" class="field" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="輸入答案">
+      <button class="btn skip" type="button" data-hs="skip">跳過</button><button class="btn primary" type="button" data-hs="fill">確定</button></div>
+      <div class="mkeys">${["√", "/", "-", "π", "x"].map(k => `<button type="button" class="btn small" data-hs="key" data-v="${k}">${k}</button>`).join("")}</div>
+      <p class="hint">分數寫成 5/32，根號可以按 √ 或打「根號3」。</p>`;
+  }
+  const fb = answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "答對了。" : `答錯了，正確答案是 ${q.t === "mc" ? `(${HS_LETTERS[q.a]})` : `<b>${esc(q.show)}</b>`}。`}${!ok && q.t === "fill" && picked ? `你寫的是「${esc(picked)}」。` : ""}</p>
+    <div class="actions"><button class="btn primary" type="button" data-hs="next">${R.pos + 1 >= R.ids.length ? "看結果" : "下一題"}</button></div>` : "";
+  v.innerHTML = hsBuddy(answered ? (ok ? "bounce" : "shake") : "") + `<p class="step"><span>${esc(s.name)}・${esc(q.secName)}</span>${R.pos + 1}／${R.ids.length}${R.kind !== "paper" ? `・${q.year} 年度第 ${q.n} 題` : ""}<button type="button" class="linkbtn" data-hs="quit">結束</button></p>
+    <article class="card">${hsQHtml(q, answered)}</article>
+    <div class="answered-bar">${fb}</div>${body}`;
+  hookImgs(v);
+  if (!answered && q.t === "fill" && kbd){ const i = $("#hsIn"); if (i) i.focus({ preventScroll:true }); }
+}
+function hsClick(b){
+  const a = b.dataset.hs, val = b.dataset.v;
+  if (a === "sub"){ hsv.sub = val; hsv.page = "sub"; renderHs(); window.scrollTo(0, 0); }
+  else if (a === "home"){ hsv.page = "home"; hsv.sub = null; renderHs(); window.scrollTo(0, 0); }
+  else if (a === "back"){ hsv.page = "sub"; hsv.run = null; renderHs(); window.scrollTo(0, 0); }
+  else if (a === "go") hsStart(val);
+  else if (a === "essay"){ hsv.page = "essay"; renderHs(); window.scrollTo(0, 0); }
+  else if (a === "pick") hsAnswer(+val);
+  else if (a === "fill"){ const i = $("#hsIn"); hsAnswer(i ? i.value.trim() : ""); }
+  else if (a === "skip") hsAnswer("");
+  else if (a === "key"){ const i = $("#hsIn"); if (i){ const p = i.selectionStart == null ? i.value.length : i.selectionStart; i.value = i.value.slice(0, p) + val + i.value.slice(i.selectionEnd == null ? p : i.selectionEnd); i.focus(); i.setSelectionRange(p + val.length, p + val.length); } }
+  else if (a === "next") hsNext();
+  else if (a === "quit"){ const R = hsv.run; if (R && Object.keys(R.picks).length){ R.ids = R.ids.slice(0, R.pos + (R.picks[R.ids[R.pos]] !== undefined ? 1 : 0)); R.cut = true; if (R.ids.length){ R.pos = R.ids.length - 1; hsNext(); return; } } hsv.page = "sub"; hsv.run = null; renderHs(); }
+}
+
 /* ---------- navigation ---------- */
 function renderAll(){
   renderHeader(); renderToday();
@@ -1411,17 +1645,19 @@ function renderAll(){
   if (!$("#view-lib").hidden) renderLib();
   if (!$("#view-set").hidden) renderSet();
   if (!$("#view-log").hidden) renderLog();
+  if (!$("#view-hs").hidden) renderHs();
 }
 function showTab(t){
   if (test) return;
   ui.bkMsg = "";
-  ["today", "drill", "lib", "log", "set"].forEach(k => { $("#view-" + k).hidden = k !== t; });
+  ["today", "drill", "lib", "log", "set", "hs"].forEach(k => { $("#view-" + k).hidden = k !== t; });
   document.querySelectorAll("[data-tab]").forEach(b => { if (b.dataset.tab === t) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   if (t === "today") renderToday();
   if (t === "drill") renderDrill();
   if (t === "lib") renderLib();
   if (t === "set") renderSet();
   if (t === "log") renderLog();
+  if (t === "hs") renderHs();
   window.scrollTo(0, 0);
 }
 function focusMain(){
@@ -1452,6 +1688,8 @@ document.addEventListener("click", e => {
     else if (a === "ok" && test) confirmTest();
     return;
   }
+  const hb = e.target.closest("[data-hs]");
+  if (hb && !hb.disabled){ hsClick(hb); return; }
   const fl = e.target.closest("[data-fill]");
   if (fl){ fillAct(fl.dataset.fill, fl.dataset.i); return; }
   const bk = e.target.closest("[data-bk]");
@@ -1481,10 +1719,14 @@ document.addEventListener("click", e => {
 document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 /* 角色圖：擋右鍵、長按、拖曳存圖 */
 ["contextmenu", "dragstart"].forEach(t => document.addEventListener(t, e => { if (e.target.closest && e.target.closest(".buddy .pic, .pick-pic")) e.preventDefault(); }));
-const NAV_ICON = { today:"heart", drill:"star", lib:"flower", log:"sparkle", set:"bubble" };
+const NAV_ICON = { hs:"star",  today:"heart", drill:"star", lib:"flower", log:"sparkle", set:"bubble" };
 document.querySelectorAll(".nav [data-tab]").forEach(b => { const k = NAV_ICON[b.dataset.tab]; if (k){ const sp = document.createElement("span"); sp.className = "ni"; sp.setAttribute("aria-hidden", "true"); sp.innerHTML = sticker(k); b.prepend(sp); } });
 
 document.addEventListener("keydown", e => {
+  if (e.target.id === "hsIn"){
+    if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229){ e.preventDefault(); const bb = $('[data-hs="fill"]'); if (bb) hsClick(bb); }
+    return;
+  }
   if (e.target.id === "spellIn"){
     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229){ e.preventDefault(); drillCheckSpell(); }
     return;
@@ -1503,6 +1745,7 @@ document.addEventListener("keydown", e => {
   }
 });
 
+document.addEventListener("input", e => { if (e.target.id === "hsEssay"){ hsState().essay[e.target.dataset.id] = e.target.value; const c = $("#hsCount"); if (c) c.textContent = [...e.target.value.replace(/\s/g, "")].length + " 字・自動儲存"; clearTimeout(hsv.st); hsv.st = setTimeout(save, 600); } });
 $("#view-lib").addEventListener("change", e => { if (e.target.id === "lvSel"){ ui.lv = e.target.value; ui.open = null; ui.limit = LIB_PAGE; renderLib(); } });
 $("#q").addEventListener("input", e => { ui.q = e.target.value; ui.open = null; ui.limit = LIB_PAGE; renderLib(); });
 $("#view-lib").addEventListener("click", e => {
@@ -1533,7 +1776,7 @@ $("#view-set").addEventListener("click", e => {
   const b = e.target.closest(".seg button");
   if (b){
     const g = b.parentElement.id, v = b.dataset.v, T = state.today;
-    if (g === "sPack"){ switchPack(v); return; }
+    if (g === "sPack"){ if (v === "hs"){ enterHs(); return; } if (hsOn()){ leaveHs(); } switchPack(v); renderSet(); return; }
     if (g === "sStart"){ state.settings.startLv = +v; if (!T.started) ensureToday(true); }
     if (g === "sDaily"){ state.settings.daily = +v; if (!T.started) ensureToday(true); }
     if (g === "sChar"){ state.settings.char = v; state.settings.charChosen = true; ui.lineKey = ""; applySkin(); }
@@ -1606,6 +1849,7 @@ async function load(){
     return;
   }
   rebuild();
+  migrateRanks();
   ensureToday();
   sanitizeToday();
   if (state.today.started && !state.today.done) enterQuizIfNeeded();
@@ -1617,6 +1861,7 @@ async function load(){
   cloudInit();
   $("#view-today").hidden = false;
   renderAll();
+  if (hsOn()){ document.body.classList.add("hs"); showTab("hs"); }
 }
 load();
 })();
