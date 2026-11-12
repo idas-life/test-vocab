@@ -1447,7 +1447,7 @@ function importBackup(file){
 
 /* ---------- 同等學力（兌換碼解鎖） ---------- */
 const HS_HASH = "7bf275b84f0bd4ba721067c37c9f6f575137d8425bfda500f1185fa61edb4eb2";
-const HS_FILES = ["hs/115.json"];
+const HS_FILES = ["hs/115.json", "hs/114.json", "hs/113.json"];
 const HS_LETTERS = "ABCD";
 let HS = null, hsv = { page:"home", sub:null, run:null };
 const hsOn = () => !!(state.hs && state.hs.ok && state.hs.on);
@@ -1507,11 +1507,12 @@ function hsCheck(q, v){ if (q.t === "mc") return v === q.a; const n = hsNorm(v);
 function hsStart(kind){
   const s = HS.subs.find(x => x.id === hsv.sub); if (!s) return;
   let ids = [];
-  if (kind === "paper") ids = s.papers[0].ids.filter(id => hsGradable(HS.byId.get(id)));
+  let year = null;
+  if (/^paper/.test(kind)){ const p = s.papers.find(x => "paper-" + x.year === kind) || s.papers[0]; year = p.year; ids = p.ids.filter(id => hsGradable(HS.byId.get(id))); kind = "paper"; }
   else if (kind === "rand") ids = shuffle(s.qs.filter(hsGradable).map(q => q.id)).slice(0, 10);
   else if (kind === "wrong") ids = shuffle(hsState().wrong.filter(id => HS.byId.has(id) && HS.byId.get(id).subName === s.name));
   if (!ids.length) return;
-  hsv.run = { kind, ids, pos:0, picks:{}, t0:Date.now() };
+  hsv.run = { kind, year, ids, pos:0, picks:{}, t0:Date.now() };
   hsv.page = "q";
   setMood("idle", "hs-" + kind + "-" + Date.now());
   renderHs(); window.scrollTo(0, 0);
@@ -1568,21 +1569,22 @@ function renderHs(){
   if (hsv.page === "sub"){
     setMood("idle", "hs-sub-" + s.id);
     const gq = s.qs.filter(hsGradable), st = hsStat(gq), w = h.wrong.filter(id => (HS.byId.get(id) || {}).subName === s.name).length;
-    const p = s.papers[0], essay = s.qs.find(q => q.t === "essay");
-    const secs = p.secs.map((sc, i) => { const qs = gq.filter(q => q.sec === i); if (!qs.length) return ""; const t = hsStat(qs); return `<li>${esc(sc.name)}：${qs.length} 題，每題 ${sc.pts} 分${t.done ? `，做過 ${t.done} 題、答對 ${t.right}` : ""}</li>`; }).join("");
+    const essays = s.qs.filter(q => q.t === "essay");
+    const secs = s.papers[0].secs.map((sc, i) => { const qs = gq.filter(q => q.sec === i); if (!qs.length) return ""; const t = hsStat(qs); return `<li>${esc(sc.name)}：${qs.length} 題，每題 ${sc.pts} 分${t.done ? `，做過 ${t.done} 題、答對 ${t.right}` : ""}</li>`; }).join("");
     v.innerHTML = hsBuddy("") + `<p class="step"><button type="button" class="linkbtn" data-hs="home">← 五科</button></p><h2>${esc(s.name)}</h2>
       <ul class="hsinfo">${secs}</ul>
       <ul class="modes">
-        <li><button type="button" class="mode" data-hs="go" data-v="paper"><b>${p.year} 年度整份</b><span>照考卷順序做完 ${p.ids.filter(id => hsGradable(HS.byId.get(id))).length} 題，最後算分數。正式考試 ${p.mins} 分鐘。</span></button></li>
+        ${s.papers.map(p => { const pq = p.ids.map(id => HS.byId.get(id)).filter(hsGradable), t = hsStat(pq);
+          return `<li><button type="button" class="mode" data-hs="go" data-v="paper-${p.year}"><b>${p.year} 年度整份</b><span>照考卷順序做完 ${pq.length} 題，最後算分數。正式考試 ${p.mins} 分鐘。${t.done ? `已做過 ${t.done} 題。` : ""}</span></button></li>`; }).join("")}
         <li><button type="button" class="mode" data-hs="go" data-v="rand"><b>隨機 10 題</b><span>零碎時間用，題目打亂抽。</span></button></li>
         <li><button type="button" class="mode" data-hs="go" data-v="wrong"${w ? "" : " disabled"}><b>錯題重做</b><span>${w ? `目前有 ${w} 題答錯過，重做答對就會移出錯題本。` : "還沒有答錯的題目。"}</span></button></li>
-        ${essay ? `<li><button type="button" class="mode" data-hs="essay"><b>作文練習</b><span>${p.year} 年度題目：${esc(essay.q.split("<br>")[0].replace("題目：", ""))}。寫的內容會存在這支手機。</span></button></li>` : ""}
+        ${essays.map(e => `<li><button type="button" class="mode" data-hs="essay" data-v="${esc(e.id)}"><b>作文練習・${e.year} 年度</b><span>題目：${esc(e.q.split("<br>")[0].replace("題目：", ""))}。${(h.essay[e.id] || "").trim() ? "已經寫了一些，" : ""}寫的內容會存在這支手機。</span></button></li>`).join("")}
       </ul>`;
     hookImgs(v); return;
   }
   if (hsv.page === "essay"){
-    const e = s.qs.find(q => q.t === "essay"), txt = h.essay[e.id] || "";
-    v.innerHTML = `<p class="step"><button type="button" class="linkbtn" data-hs="back">← ${esc(s.name)}</button></p><h2>作文（40 分）</h2>
+    const e = s.qs.find(q => q.t === "essay" && q.id === hsv.essay) || s.qs.find(q => q.t === "essay"), txt = h.essay[e.id] || "";
+    v.innerHTML = `<p class="step"><button type="button" class="linkbtn" data-hs="back">← ${esc(s.name)}</button></p><h2>${e.year} 年度作文</h2>
       <article class="card"><p class="hsstem">${e.q}</p></article>
       <label class="vh" for="hsEssay">作文內容</label><textarea id="hsEssay" data-id="${esc(e.id)}" class="field essay" rows="14" placeholder="先列大綱再寫：開頭點題 → 一件具體經驗 → 你怎麼面對、想通了什麼 → 結尾呼應題目。">${esc(txt)}</textarea>
       <p class="hint" id="hsCount">${[...txt.replace(/\s/g, "")].length} 字・自動儲存</p>
@@ -1596,7 +1598,7 @@ function renderHs(){
     const full = R.kind === "paper" ? qs.reduce((t, q) => t + q.pts, 0) : 0;
     const mins = Math.max(1, Math.round((Date.now() - R.t0) / 60000));
     const wrongList = qs.filter(q => !hsCheck(q, R.picks[q.id])).map(q => `<li><b>${esc(q.secName)} 第 ${q.n} 題</b>：正確答案 ${q.t === "mc" ? `(${HS_LETTERS[q.a]})` : esc(q.show)}${R.picks[q.id] == null || R.picks[q.id] === "" ? "（沒作答）" : ""}</li>`).join("");
-    v.innerHTML = hsBuddy(right / qs.length >= 0.6 ? "bounce" : "shake") + `<h2>${esc(s.name)}・結果</h2>
+    v.innerHTML = hsBuddy(right / qs.length >= 0.6 ? "bounce" : "shake") + `<h2>${esc(s.name)}・${R.kind === "paper" && R.year ? R.year + " 年度・" : ""}結果</h2>
       <dl class="result"><div><dt>答對</dt><dd>${right}<small>／${qs.length}</small></dd></div>${pts != null ? `<div><dt>分數</dt><dd>${Math.round(pts * 10) / 10}<small>／${full}</small></dd></div>` : ""}<div><dt>用時</dt><dd>${mins}<small>分</small></dd></div></dl>
       ${R.cut ? `<p class="hint">中途結束，分數只算做完的 ${qs.length} 題。</p>` : pts != null && full < 100 ? `<p class="hint">作文 ${100 - full} 分沒有算在裡面。</p>` : ""}
       ${pts != null && !R.cut ? `<p class="hint">${pts >= 60 * full / 100 ? "已經達到及格線，繼續保持。" : "還沒到及格線（60 分），先把錯題重做一遍。"}</p>` : ""}
@@ -1617,7 +1619,7 @@ function renderHs(){
   }
   const fb = answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "答對了。" : `答錯了，正確答案是 ${q.t === "mc" ? `(${HS_LETTERS[q.a]})` : `<b>${esc(q.show)}</b>`}。`}${!ok && q.t === "fill" && picked ? `你寫的是「${esc(picked)}」。` : ""}</p>
     <div class="actions"><button class="btn primary" type="button" data-hs="next">${R.pos + 1 >= R.ids.length ? "看結果" : "下一題"}</button></div>` : "";
-  v.innerHTML = hsBuddy(answered ? (ok ? "bounce" : "shake") : "") + `<p class="step"><span>${esc(s.name)}・${esc(q.secName)}</span>${R.pos + 1}／${R.ids.length}${R.kind !== "paper" ? `・${q.year} 年度第 ${q.n} 題` : ""}<button type="button" class="linkbtn" data-hs="quit">結束</button></p>
+  v.innerHTML = hsBuddy(answered ? (ok ? "bounce" : "shake") : "") + `<p class="step"><span>${esc(s.name)}・${R.kind === "paper" ? q.year + " 年度・" : ""}${esc(q.secName)}</span>${R.pos + 1}／${R.ids.length}${R.kind !== "paper" ? `・${q.year} 年度第 ${q.n} 題` : ""}<button type="button" class="linkbtn" data-hs="quit">結束</button></p>
     <article class="card">${hsQHtml(q, answered)}</article>
     <div class="answered-bar">${fb}</div>${body}`;
   hookImgs(v);
@@ -1629,7 +1631,7 @@ function hsClick(b){
   else if (a === "home"){ hsv.page = "home"; hsv.sub = null; renderHs(); window.scrollTo(0, 0); }
   else if (a === "back"){ hsv.page = "sub"; hsv.run = null; renderHs(); window.scrollTo(0, 0); }
   else if (a === "go") hsStart(val);
-  else if (a === "essay"){ hsv.page = "essay"; renderHs(); window.scrollTo(0, 0); }
+  else if (a === "essay"){ hsv.page = "essay"; hsv.essay = val; renderHs(); window.scrollTo(0, 0); }
   else if (a === "pick") hsAnswer(+val);
   else if (a === "fill"){ const i = $("#hsIn"); hsAnswer(i ? i.value.trim() : ""); }
   else if (a === "skip") hsAnswer("");
