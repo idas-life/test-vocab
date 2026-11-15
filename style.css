@@ -532,3 +532,26 @@ textarea.field{width:100%;font:inherit;line-height:1.5;resize:vertical;min-heigh
 .tfsets small{font-size:.75rem;color:var(--ink-soft)}
 .tfnote{color:var(--seal)}
 .tfsets button[aria-pressed="true"] small{color:inherit;opacity:.8}
+
+.ntsecs{display:grid;gap:.7rem;margin-top:1rem}
+.ntsec{background:var(--card,#fff);border:1px solid var(--line);border-radius:16px;padding:.2rem .95rem}
+.ntsec>summary{cursor:pointer;font-weight:700;font-size:1.05rem;padding:.75rem 0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.ntsec[open]>summary{border-bottom:1px dotted var(--rim,var(--line))}
+.ntbody{padding:.5rem 0 .9rem;line-height:1.7}
+.ntbody ol,.ntbody ul{padding-left:1.3rem;margin:.4rem 0}
+.ntbody li{margin:.3rem 0}
+.ntbody h4{margin:1rem 0 .3rem}
+.ntbody .dtab td,.ntbody .dtab th{font-size:.9rem;vertical-align:top}
+.ntex{border-left:3px solid var(--gold,#c33);padding:.2rem .8rem;margin:.6rem 0;font-size:.95rem}
+.ntex p{margin:.35rem 0}
+.ntcheck{list-style:none;padding-left:0!important}
+.ntcheck label{display:flex;gap:.5rem;align-items:flex-start;cursor:pointer}
+.ntcheck input{margin-top:.45rem;width:1.1rem;height:1.1rem;flex:none}
+.ntcheck input:checked+span{text-decoration:line-through;opacity:.6}
+.ntmines{margin-top:1rem;border-top:1px dashed var(--line);padding-top:.6rem}
+.nthead{font-weight:700;font-size:.9rem;opacity:.75;margin:.2rem 0}
+.ntmine{background:var(--soft,#f6f0f0);border-radius:12px;padding:.6rem .8rem;margin:.5rem 0}
+.ntmine h4{margin:.1rem 0 .3rem}
+.ntmb{white-space:pre-wrap;word-break:break-word}
+.ntform{margin-top:.8rem}
+.ntsec>summary{-webkit-tap-highlight-color:transparent}

@@ -203,9 +203,57 @@ async function decryptPack(file, code){
   return JSON.parse(new TextDecoder().decode(plain));
 }
 function mountPack(meta, data){
-  Object.assign(meta, { name:data.name || meta.name, levels:data.levels || meta.levels || [], speech:data.speech !== undefined ? data.speech : meta.speech, exam:data.exam || meta.exam, idPrefix:data.idPrefix || meta.idPrefix, order:!!data.order });
+  Object.assign(meta, { name:meta.name || data.name, levels:data.levels || meta.levels || [], speech:data.speech !== undefined ? data.speech : meta.speech, exam:data.exam || meta.exam, idPrefix:data.idPrefix || meta.idPrefix, order:!!data.order });
   addPackWords(meta, data.words || []);
   if (data.tf) tfPrep(data.tf);
+  if (data.notes) NOTES = data.notes;
+}
+/* ---------- 托福寫作模板（toeflcn 包裡的 notes） ---------- */
+let NOTES = null;
+const nu = { open:{}, add:null, edit:null, delArm:null };
+function notesState(){
+  if (!state.notes || typeof state.notes !== "object") state.notes = {};
+  const n = state.notes;
+  if (!Array.isArray(n.mine)) n.mine = [];
+  if (!n.checks || typeof n.checks !== "object") n.checks = {};
+  return n;
+}
+function ntForm(sec, m){
+  return `<div class="addform ntform" data-sec="${esc(sec)}"${m ? ` data-id="${esc(m.id)}"` : ""}>
+    <label>標題（選填）<input class="field" data-nf="title" value="${esc(m ? m.title : "")}" autocomplete="off"></label>
+    <label>內容<textarea class="field" data-nf="body" rows="7" autocapitalize="sentences" placeholder="模板、句型、例子、提醒都可以，換行會保留">${esc(m ? m.body : "")}</textarea></label>
+    <p class="form-msg" id="ntMsg" aria-live="polite"></p>
+    <div class="rowacts"><button type="button" class="btn primary small" data-nt="save">儲存</button><button type="button" class="btn small" data-nt="cancel">取消</button></div></div>`;
+}
+function ntMine(m){
+  if (nu.edit === m.id) return ntForm(m.sec, m);
+  return `<div class="ntmine">${m.title ? `<h4>${esc(m.title)}</h4>` : ""}<div class="ntmb">${esc(m.body)}</div>
+    <p class="rowacts"><button type="button" class="btn small" data-nt="edit" data-id="${esc(m.id)}">修改</button><button type="button" class="btn danger small" data-nt="del" data-id="${esc(m.id)}">${nu.delArm === m.id ? "再按一次確認刪除" : "刪除"}</button></p></div>`;
+}
+function renderNote(){
+  const v = $("#view-note");
+  if (!NOTES){ v.innerHTML = `<h2>寫作模板</h2><p class="lede">輸入托福真題的兌換碼解鎖後才看得到。</p>`; return; }
+  const n = notesState();
+  const secs = [{ id:"mine", title:"我的筆記", html:`<p class="hint">不屬於下面任何一段的，寫在這裡。</p>` }].concat(NOTES.sections);
+  v.innerHTML = buddyHtml("") + `<p class="step"><button type="button" class="linkbtn" data-tab-go="drill">← 練習</button></p><h2>${esc(NOTES.name || "寫作模板")}</h2><p class="lede">點標題展開。每一段最下面都可以「＋ 補充」自己的模板或句子，存在這支手機，備份時會一起帶走。</p>
+    <div class="ntsecs">${secs.map(sc => {
+      const mine = n.mine.filter(m => m.sec === sc.id);
+      const html = sc.html.replace(/<li data-ck="(\w+)">([\s\S]*?)<\/li>/g, (x, k, t) => `<li><label><input type="checkbox" data-ck="${k}"${n.checks[k] ? " checked" : ""}> <span>${t}</span></label></li>`);
+      return `<details class="ntsec" data-sec="${esc(sc.id)}"${nu.open[sc.id] ? " open" : ""}><summary>${esc(sc.title)}${mine.length ? `<span class="tag">我的 ${mine.length}</span>` : ""}</summary>
+        <div class="ntbody">${html}
+        ${mine.length ? `<div class="ntmines"><p class="nthead">我補充的</p>${mine.map(ntMine).join("")}</div>` : ""}
+        ${nu.add === sc.id ? ntForm(sc.id) : `<p><button type="button" class="btn small" data-nt="add" data-sec="${esc(sc.id)}">＋ 補充</button></p>`}</div></details>`;
+    }).join("")}</div>`;
+  hookImgs(v);
+}
+function ntSave(box){
+  const n = notesState(), get = k => box.querySelector(`[data-nf="${k}"]`).value;
+  const title = get("title").trim(), body = get("body").replace(/\s+$/, "");
+  if (!body.trim()){ const m = $("#ntMsg"); m.textContent = "內容不能空白。"; m.className = "form-msg err"; return; }
+  const id = box.dataset.id;
+  if (id){ const m = n.mine.find(x => x.id === id); if (m){ m.title = title; m.body = body; m.t = Date.now(); } }
+  else n.mine.push({ id:"n" + Date.now().toString(36), sec:box.dataset.sec, title, body, t:Date.now() });
+  nu.add = null; nu.edit = null; save(); renderNote();
 }
 async function loadUnlocked(){
   for (const meta of PACKS){
@@ -231,7 +279,7 @@ async function redeem(raw){
       const data = await decryptPack(meta.file, code);
       mountPack(meta, data); state.unlocks[meta.id] = code;
       switchPack(meta.id);
-      msg.textContent = `解鎖了「${meta.name}」，已經切換過去。` + (data.tf ? "真題閱讀在「練習」頁最上面。" : "");
+      msg.textContent = `解鎖了「${meta.name}」，已經切換過去。` + (data.tf ? `真題閱讀${data.notes ? "和寫作模板" : ""}在「練習」頁最上面。` : "");
       $("#redeemIn").value = "";
       return;
     } catch (e) {}
@@ -1132,6 +1180,7 @@ function renderDrill(){
     v.innerHTML = buddyHtml("") + `<h2>練習</h2><p class="lede">每題答對加 ${DRILL_XP} 分。答錯的字會排進明天的複習。</p>
       <ul class="modes">
         ${TF ? `<li><button type="button" class="mode tfmode" data-tab-go="tf"><b>托福真題・閱讀</b><span>${TF.sets.length > 1 ? `${TF.sets.map(s => esc(s.short || s.title)).join("、")} 共 ${TF.sets.length} 套` : esc((TF.sets[0] || {}).title || "")}：補字 ${tfAll("ctw").length} 篇、日常閱讀 ${tfAll("dl").length} 篇、學術閱讀 ${tfAll("ap").length} 篇。</span></button></li>` : ""}
+        ${NOTES ? `<li><button type="button" class="mode tfmode" data-tab-go="note"><b>${esc(NOTES.name || "托福寫作模板")}</b><span>${NOTES.sections.map(x => esc(x.title)).slice(1, 5).join("、")}……共 ${NOTES.sections.length} 段${notesState().mine.length ? `，你補充了 ${notesState().mine.length} 則` : "，每段都可以補充自己的模板"}。</span></button></li>` : ""}
         <li><button type="button" class="mode" data-drill="go" data-mode="cloze"><b>詞彙題模擬</b><span>例句挖一個空格，四個詞性相同的選項，跟學測詞彙題一樣考「哪個字放進句子才通」。題庫 ${nEx} 句。</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="spell"><b>拼字</b><span>看中文拼出英文，練中譯英和作文用得到的字。${nLearned ? `從學過的 ${nLearned} 個字出題。` : "還沒學過字的話，會先從起始級數出題。"}</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="passage"><b>克漏字</b><span>一篇短文 5 個空格，照學測綜合測驗出：詞彙、片語、轉承詞、文法都有，每格附解析。共 ${PASS.length} 篇。</span></button></li>
@@ -1898,7 +1947,7 @@ function renderAll(){
 function showTab(t){
   if (test) return;
   ui.bkMsg = "";
-  ["today", "drill", "lib", "log", "set", "hs", "tf"].forEach(k => { $("#view-" + k).hidden = k !== t; });
+  ["today", "drill", "lib", "log", "set", "hs", "tf", "note"].forEach(k => { $("#view-" + k).hidden = k !== t; });
   document.querySelectorAll("[data-tab]").forEach(b => { if (b.dataset.tab === t) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   if (t === "today") renderToday();
   if (t === "drill") renderDrill();
@@ -1907,6 +1956,7 @@ function showTab(t){
   if (t === "log") renderLog();
   if (t === "hs") renderHs();
   if (t === "tf"){ tfv.page = "home"; renderTf(); }
+  if (t === "note") renderNote();
   window.scrollTo(0, 0);
 }
 function focusMain(){
@@ -2040,6 +2090,20 @@ $("#view-lib").addEventListener("click", e => {
   }
 });
 $("#addBtn").addEventListener("click", addCustom);
+$("#view-note").addEventListener("toggle", e => { const d = e.target; if (d.matches && d.matches("details.ntsec")) nu.open[d.dataset.sec] = d.open; }, true);
+$("#view-note").addEventListener("change", e => { const c = e.target.closest("[data-ck]"); if (c){ notesState().checks[c.dataset.ck] = c.checked; save(); } });
+$("#view-note").addEventListener("click", e => {
+  const b = e.target.closest("[data-nt]"); if (!b) return;
+  const a = b.dataset.nt, id = b.dataset.id;
+  if (a === "add"){ nu.add = b.dataset.sec; nu.edit = null; renderNote(); const t = document.querySelector('.ntform [data-nf="body"]'); if (t) t.focus(); return; }
+  if (a === "edit"){ nu.edit = id; nu.add = null; nu.delArm = null; renderNote(); const t = document.querySelector('.ntform [data-nf="body"]'); if (t) t.focus(); return; }
+  if (a === "cancel"){ nu.add = null; nu.edit = null; renderNote(); return; }
+  if (a === "save"){ ntSave(b.closest(".ntform")); return; }
+  if (a === "del"){
+    if (nu.delArm !== id){ nu.delArm = id; renderNote(); setTimeout(() => { if (nu.delArm === id){ nu.delArm = null; renderNote(); } }, 4000); return; }
+    const n = notesState(); n.mine = n.mine.filter(m => m.id !== id); nu.delArm = null; save(); renderNote();
+  }
+});
 $("#bulkBtn").addEventListener("click", addBulk);
 $("#mineBox").addEventListener("click", e => {
   const m = e.target.closest("[data-mine]");
@@ -2080,7 +2144,7 @@ $("#view-set").addEventListener("click", e => {
       return;
     }
     clearTimeout(resetTimer); resetArmed = false;
-    const keep = { custom:state.custom, settings:state.settings, sync:state.sync };
+    const keep = { custom:state.custom, settings:state.settings, sync:state.sync, notes:state.notes, unlocks:state.unlocks };
     state = Object.assign(freshState(), keep);
     rebuild(); ensureToday(true); save(); renderAll();
     $("#resetNote").textContent = "已重設。回到「今日」可以重新做程度測驗。";
