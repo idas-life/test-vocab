@@ -492,3 +492,43 @@ body.hs .top, body.hs .countdown{display:none}
 .essay{width:100%;min-height:18rem;line-height:1.8;font-size:1rem;resize:vertical}
 .hswrong{padding-left:1.2rem;line-height:1.8}
 .imgtip{text-align:center;margin:.3rem 0 0;font-size:.8rem}
+.mat{display:inline-grid;grid-template-columns:auto auto;vertical-align:middle;border-left:1.5px solid currentColor;border-right:1.5px solid currentColor;border-radius:5px;padding:0 .2em;margin:0 .15em;line-height:1.35}
+.mat>span{padding:.05em .35em;text-align:center}
+.addh{font-size:1rem;margin:1.3rem 0 0}
+.minebox{margin-top:.8rem;display:grid;gap:.55rem}
+.rowacts{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.editform{margin-top:.7rem}
+textarea.field{width:100%;font:inherit;line-height:1.5;resize:vertical;min-height:7.5rem}
+
+/* 托福真題閱讀 */
+.tflist{list-style:none;margin:.6rem 0 0;padding:0;display:grid;gap:.45rem}
+.tfitem{width:100%;display:flex;justify-content:space-between;align-items:baseline;gap:.8rem;text-align:left;background:var(--card);color:var(--ink);border:1px solid var(--line);border-left-width:4px;border-radius:6px;padding:.7rem .9rem;font:inherit;cursor:pointer}
+.tfitem span{font-family:var(--en)}
+.tfitem small{flex:none;color:var(--ink-soft);font-size:.85rem}
+.tfitem.full{border-left-color:var(--celadon)}
+.tfitem.some{border-left-color:var(--seal)}
+.tfitem.part{border-left-color:var(--gold)}
+.tftitle{font-family:var(--en)}
+.tfp{font-family:var(--en);font-size:1.05rem;line-height:1.75}
+.tfp p{margin:0 0 .8rem}.tfp p:last-child{margin:0}
+.tfp .hl{background:var(--celadon-bg);color:inherit;font-weight:600;padding:0 .1em;border-radius:2px}
+.tfp .ins,.tfstem .ins{font-family:var(--en);color:var(--seal);font-weight:700}
+.tfp .dlh{display:block;font-weight:700;font-size:1.12rem}
+.ctwp{line-height:2.1}
+.ctw{white-space:nowrap}
+.ctw b{font-weight:600}
+.ctwin{font:inherit;font-size:1rem;padding:0 .2em 0 .05em;margin:0;vertical-align:baseline;border:none;border-bottom:2px solid var(--ink-soft);background:var(--celadon-bg);color:var(--ink);border-radius:3px 3px 0 0;letter-spacing:.05em}
+.ctwin:focus{outline:2px solid var(--focus);outline-offset:1px}
+.ctw.ok u{text-decoration:none;color:var(--celadon);font-weight:700}
+.ctw.no u{text-decoration:none;color:var(--seal);font-weight:700}
+.ctw s{color:var(--ink-soft);font-size:.82em;margin-left:.25em}
+.tfq{margin:1.3rem 0 0}
+.tfstem{margin:0 0 .55rem;line-height:1.6}
+.tfstem .qn{margin-right:.35rem}
+.inssent{display:block;margin-top:.35rem;font-family:var(--en);font-style:italic}
+.mode.tfmode{border-color:var(--celadon)}
+.tfsets{margin:.6rem 0 .2rem;flex-wrap:wrap}
+.tfsets button{display:inline-flex;flex-direction:column;align-items:center;line-height:1.25}
+.tfsets small{font-size:.75rem;color:var(--ink-soft)}
+.tfnote{color:var(--seal)}
+.tfsets button[aria-pressed="true"] small{color:inherit;opacity:.8}

@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
 <div class="wrap">
@@ -64,14 +64,25 @@
       <p class="empty" id="listEmpty" hidden>沒有符合的字。換個關鍵字或篩選試試。</p>
 
       <details class="add">
-        <summary>加入自己的字</summary>
+        <summary id="mineSum">加入自己的字</summary>
+        <div id="mineBox" class="minebox" hidden></div>
+        <h3 class="addh">加一個字</h3>
         <div class="addform" id="addForm">
           <label>英文單字<input name="w" class="field" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
           <label>中文意思<input name="zh" class="field" autocomplete="off"></label>
           <label>詞性（選填）<input name="pos" class="field" placeholder="例如 adj." autocomplete="off"></label>
-          <label>例句（選填）<input name="ex" class="field" autocomplete="off"></label>
+          <label>例句（選填）<input name="ex" class="field" autocomplete="off" lang="en" placeholder="寫一句有用到這個字的英文句子"></label>
+          <label>例句中文（選填）<input name="exzh" class="field" autocomplete="off"></label>
+          <p class="hint">有填例句的字，會多一種「例句填空」的題目。之後也可以點開那個字再補例句。</p>
           <p class="form-msg" id="addMsg" aria-live="polite"></p>
-          <div><button class="btn primary" type="button" id="addBtn">加入字庫</button></div>
+          <div><button class="btn primary" type="button" id="addBtn">加入我的單字</button></div>
+        </div>
+        <h3 class="addh">一次貼上很多字</h3>
+        <div class="addform">
+          <label>一行一個字<textarea id="bulkIn" class="field" rows="6" autocapitalize="off" spellcheck="false" placeholder="abandon 放棄&#10;sustain v. 支撐、維持&#10;relieve | v. 減輕 | The medicine relieved my headache. | 這個藥減輕了我的頭痛。"></textarea></label>
+          <p class="hint">寫「英文 中文」就可以，詞性可寫可不寫。要附例句的話，用直線 | 隔開：英文 | 中文 | 例句 | 例句中文。從 Excel 或 Google 試算表複製整欄貼上也可以。</p>
+          <p class="form-msg" id="bulkMsg" aria-live="polite"></p>
+          <div><button class="btn primary" type="button" id="bulkBtn">全部加入</button></div>
         </div>
       </details>
       <p class="hint credit">字表：大學入學考試中心《高中英文參考詞彙表（111 學年度起適用）》。中文釋義整理自 ECDICT（MIT 授權），可能有不夠精準的地方。</p>
@@ -79,6 +90,7 @@
 
     <section id="view-log" hidden></section>
     <section id="view-hs" hidden></section>
+    <section id="view-tf" hidden></section>
 
     <section id="view-set" hidden>
       <h2>設定</h2>
@@ -224,6 +236,6 @@
   </ul>
 </nav>
 
-<script src="app.js?v=22"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

@@ -42,6 +42,12 @@
    "name": "托福",
    "file": "packs/toefl.lock.json",
    "locked": true
+  },
+  {
+   "id": "toeflcn",
+   "name": "托福真題",
+   "file": "packs/toeflcn.lock.json",
+   "locked": true
   }
  ],
  "firebase": null

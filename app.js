@@ -134,7 +134,8 @@ function logRun(m, n, r, secs, wrong, ty){
 let state = normalize(loadLocal());
 
 /* ---------- 字庫包 ---------- */
-function curPackId(){ const id = state.settings.pack || "gsat"; return PACK_WORDS[id] ? id : "gsat"; }
+function curPackId(){ const id = state.settings.pack || "gsat"; if (id === "mine" && !state.custom.length) return "gsat"; return PACK_WORDS[id] ? id : "gsat"; }
+function isMine(){ return curPackId() === "mine"; }
 function curPack(){ return PACKS.find(p => p.id === curPackId()) || { id:"gsat", name:"學測", levels:[] }; }
 function isGsat(){ return curPackId() === "gsat"; }
 function lvName(lv, pk){ const p = pk || curPack(); const L = p.levels || []; return L[lv] || (p.id === "gsat" ? `第 ${lv} 級` : `等級 ${lv}`); }
@@ -150,14 +151,46 @@ function addPackWords(meta, list){
     return w;
   });
 }
+/* ---------- 我的單字 ---------- */
+const MINE_MAX = 3000;
+const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function braceEx(ex, w){
+  ex = String(ex || "").trim();
+  if (!ex || /\{[^}]+\}/.test(ex)) return ex;
+  const k = w.toLowerCase(), alts = [k];
+  if (!/\s/.test(k)){
+    alts.push(k + "s", k + "es", k + "d", k + "ed", k + "ing", k + k.slice(-1) + "ed", k + k.slice(-1) + "ing");
+    if (/e$/.test(k)) alts.push(k.slice(0, -1) + "ing");
+    if (/y$/.test(k)) alts.push(k.slice(0, -1) + "ies", k.slice(0, -1) + "ied");
+  }
+  alts.sort((a, b) => b.length - a.length);
+  return ex.replace(new RegExp("(^|[^A-Za-z])(" + alts.map(reEsc).join("|") + ")(?![A-Za-z])", "i"), (m, a, b) => a + "{" + b + "}");
+}
+function exCode(form, k){
+  form = form.toLowerCase(); k = k.toLowerCase();
+  if (form === k || /\s/.test(k)) return "0";
+  if (/ing$/.test(form)) return "i";
+  if (/ed$/.test(form)) return "d";
+  if (/s$/.test(form)) return "3";
+  return "0";
+}
+function mineWord(c){
+  const w = prepWord({ id:c.w.toLowerCase(), w:c.w, k:c.w, pos:c.pos || "", lv:0, m:[[c.pos || "", c.zh]], tag:"M" });
+  if (c.ex){
+    const m = c.ex.match(/\{([^}]+)\}/);
+    w.ex = { s:c.ex, zh:c.exzh || "", pos:mainPos(c.pos || ""), code:m ? exCode(m[1], c.w) : "" };
+  }
+  return w;
+}
 function rebuild(){
-  const custom = state.custom.filter(c => c && c.w && c.zh && !BANK_IDS.has(c.w.toLowerCase()))
-    .map(c => prepWord({ id:c.w.toLowerCase(), w:c.w, k:c.w, pos:c.pos || "", lv:0, m:[[c.pos || "", c.zh]], ex:c.ex || "", tag:"M" }));
+  const mine = state.custom.filter(c => c && c.w && c.zh).map(mineWord);
+  PACK_WORDS.mine = mine;
+  const custom = state.settings.mixMine === false ? [] : mine.filter(w => !BANK_IDS.has(w.id));
+  const base = PACK_WORDS[curPackId()] || BANK;
   BYID = new Map();
-  (PACK_WORDS[curPackId()] || []).forEach(w => BYID.set(w.id, w));
+  base.forEach(w => BYID.set(w.id, w));
   Object.keys(PACK_WORDS).forEach(pk => PACK_WORDS[pk].forEach(w => { if (!BYID.has(w.id)) BYID.set(w.id, w); }));
-  custom.forEach(w => { if (!BYID.has(w.id)) BYID.set(w.id, w); });
-  WORDS = (PACK_WORDS[curPackId()] || BANK).concat(custom);
+  WORDS = isMine() ? mine : base.concat(custom);
   ALLW = [...BYID.values()];
 }
 const normCode = c => String(c || "").toUpperCase().replace(/[\s-]/g, "");
@@ -172,6 +205,7 @@ async function decryptPack(file, code){
 function mountPack(meta, data){
   Object.assign(meta, { name:data.name || meta.name, levels:data.levels || meta.levels || [], speech:data.speech !== undefined ? data.speech : meta.speech, exam:data.exam || meta.exam, idPrefix:data.idPrefix || meta.idPrefix, order:!!data.order });
   addPackWords(meta, data.words || []);
+  if (data.tf) tfPrep(data.tf);
 }
 async function loadUnlocked(){
   for (const meta of PACKS){
@@ -197,7 +231,7 @@ async function redeem(raw){
       const data = await decryptPack(meta.file, code);
       mountPack(meta, data); state.unlocks[meta.id] = code;
       switchPack(meta.id);
-      msg.textContent = `解鎖了「${meta.name}」，已經切換過去。`;
+      msg.textContent = `解鎖了「${meta.name}」，已經切換過去。` + (data.tf ? "真題閱讀在「練習」頁最上面。" : "");
       $("#redeemIn").value = "";
       return;
     } catch (e) {}
@@ -361,7 +395,8 @@ function inflect(w, code){
 function hasPos(w, p){ return w.pos.replace(/[()]/g, "").split("/").some(x => x.replace(/\.$/, "") === p.replace(/\.$/, "")); }
 
 function distractors(w, n, filter, strict){
-  const pool = shuffle(WORDS.filter(x => x.id !== w.id && x.tag !== "M" && filter(x)));
+  const src = isMine() ? WORDS.concat(BANK) : WORDS.filter(x => x.tag !== "M");
+  const pool = shuffle(src.filter(x => x.id !== w.id && filter(x)));
   const picks = [];
   for (const x of pool){
     if (picks.length >= n) break;
@@ -369,7 +404,7 @@ function distractors(w, n, filter, strict){
     picks.push(x);
   }
   if (picks.length < n && !strict){
-    for (const x of shuffle(WORDS.filter(x => x.id !== w.id && x.tag !== "M"))){
+    for (const x of shuffle(src.filter(x => x.id !== w.id))){
       if (picks.length >= n) break;
       if (picks.includes(x) || conflicts(w, x) || picks.some(p => conflicts(p, x))) continue;
       picks.push(x);
@@ -918,7 +953,7 @@ function drillNext(){
   else setupDrillItem();
   renderDrill(); focusMain();
 }
-const MODE_NAME = { cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", fill:"文意選填", daily:"每日功課", test:"程度測驗" };
+const MODE_NAME = { tfctw:"托福補字", tfread:"托福閱讀", cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", fill:"文意選填", daily:"每日功課", test:"程度測驗" };
 const TYPE_NAME = { vocab:"詞彙", phrase:"片語", conj:"轉承詞", gram:"文法" };
 
 /* ---------- 克漏字 ---------- */
@@ -1096,6 +1131,7 @@ function renderDrill(){
     const nLearned = WORDS.filter(w => status(w.id) > 0).length;
     v.innerHTML = buddyHtml("") + `<h2>練習</h2><p class="lede">每題答對加 ${DRILL_XP} 分。答錯的字會排進明天的複習。</p>
       <ul class="modes">
+        ${TF ? `<li><button type="button" class="mode tfmode" data-tab-go="tf"><b>托福真題・閱讀</b><span>${TF.sets.length > 1 ? `${TF.sets.map(s => esc(s.short || s.title)).join("、")} 共 ${TF.sets.length} 套` : esc((TF.sets[0] || {}).title || "")}：補字 ${tfAll("ctw").length} 篇、日常閱讀 ${tfAll("dl").length} 篇、學術閱讀 ${tfAll("ap").length} 篇。</span></button></li>` : ""}
         <li><button type="button" class="mode" data-drill="go" data-mode="cloze"><b>詞彙題模擬</b><span>例句挖一個空格，四個詞性相同的選項，跟學測詞彙題一樣考「哪個字放進句子才通」。題庫 ${nEx} 句。</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="spell"><b>拼字</b><span>看中文拼出英文，練中譯英和作文用得到的字。${nLearned ? `從學過的 ${nLearned} 個字出題。` : "還沒學過字的話，會先從起始級數出題。"}</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="passage"><b>克漏字</b><span>一篇短文 5 個空格，照學測綜合測驗出：詞彙、片語、轉承詞、文法都有，每格附解析。共 ${PASS.length} 篇。</span></button></li>
@@ -1155,13 +1191,14 @@ function rowHtml(w){
     more = `<div class="row-more"><p class="meta">${lvTag(w)}<span class="pos" lang="en">${esc(w.pos)}</span>${sayBtn(w.k)}</p>
       ${sensesHtml(w)}${exLine(w)}
       ${p && p[2] ? `<p class="hint">作答 ${p[2]} 次，答對 ${p[3]} 次${p[0] > 0 ? `。下次複習：${dueText(p[1])}` : ""}</p>` : ""}
-      ${w.tag === "M" ? `<p><button type="button" class="btn danger small" data-lib="del" data-id="${esc(w.id)}">${ui.delArm === w.id ? "再按一次確認刪除" : "刪除這個字"}</button></p>` : ""}</div>`;
+      ${w.tag === "M" ? (ui.edit === w.id ? editHtml(w) : `<p class="rowacts"><button type="button" class="btn small" data-lib="edit" data-id="${esc(w.id)}">修改／填例句</button><button type="button" class="btn danger small" data-lib="del" data-id="${esc(w.id)}">${ui.delArm === w.id ? "再按一次確認刪除" : "刪除這個字"}</button></p>`) : ""}</div>`;
   }
   return `<li class="row"><button type="button" class="row-main" data-lib="toggle" data-id="${esc(w.id)}" aria-expanded="${open}">
     <span class="row-word" lang="en">${esc(w.w)}<small>${w.tag === "M" ? "自訂" : (isGsat() ? w.lv + " 級" : esc(lvName(w.lv)))}</small></span><span class="row-zh">${esc(shortZh(w))}</span>
     <i class="dot s${s}" aria-hidden="true"></i><span class="vh">${["未學","學習中","熟記"][s]}</span></button>${more}</li>`;
 }
 function renderLib(){
+  renderMine();
   const lvs = packLevels(), fl = $("#fLv");
   const want = ["all"].concat(lvs.map(String), state.custom.length ? ["M"] : []).join(",");
   if (fl.dataset.k !== want + curPackId()){
@@ -1187,6 +1224,84 @@ function renderLib(){
   $("#listEmpty").hidden = items.length > 0;
 }
 function refocusRow(id, sel){ const el = document.querySelector(`[data-lib="${sel}"][data-id="${CSS.escape(id)}"]`); if (el && kbd) el.focus({ preventScroll:true }); }
+function mineEntry(id){ return state.custom.find(c => c.w.toLowerCase() === id); }
+function editHtml(w){
+  const c = mineEntry(w.id) || {};
+  const f = (n, label, v, ph) => `<label>${label}<input class="field" data-ed="${n}" value="${esc(v || "")}"${ph ? ` placeholder="${ph}"` : ""} autocomplete="off"${n === "ex" ? ' autocapitalize="sentences" lang="en"' : ""}></label>`;
+  return `<div class="addform editform" data-id="${esc(w.id)}">
+    ${f("zh", "中文意思", c.zh)}${f("pos", "詞性（選填）", c.pos, "例如 adj.")}
+    ${f("ex", "例句（選填）", (c.ex || "").replace(/[{}]/g, ""), "寫一句有用到這個字的英文句子")}${f("exzh", "例句中文（選填）", c.exzh)}
+    <p class="form-msg" id="edMsg" aria-live="polite"></p>
+    <div class="rowacts"><button type="button" class="btn primary small" data-lib="save" data-id="${esc(w.id)}">儲存</button><button type="button" class="btn small" data-lib="cancel" data-id="${esc(w.id)}">取消</button></div></div>`;
+}
+function saveEdit(id){
+  const box = document.querySelector(".editform"), c = mineEntry(id); if (!box || !c) return;
+  const get = n => box.querySelector(`[data-ed="${n}"]`).value.trim();
+  const zh = get("zh"), msg = $("#edMsg");
+  if (!zh){ msg.textContent = "中文意思不能空白。"; msg.className = "form-msg err"; return; }
+  c.zh = zh; c.pos = get("pos"); c.ex = braceEx(get("ex"), c.w); c.exzh = c.ex ? get("exzh") : "";
+  ui.edit = null; rebuild(); save(); renderLib(); refocusRow(id, "toggle");
+}
+function splitPos(zh){
+  const m = zh.match(/^[(（]?((?:n|v|vt|vi|adj|adv|prep|conj|pron|phr|art|aux|num|det|int|abbr)\.(?:\/(?:n|v|vt|vi|adj|adv)\.)*)[)）]?\s*(.+)$/i);
+  return m ? [m[1].toLowerCase(), m[2].trim()] : ["", zh];
+}
+function parseMine(text){
+  const rows = [], bad = [];
+  String(text || "").split(/\r?\n/).forEach(raw => {
+    const line = raw.trim(); if (!line) return;
+    let w = "", zh = "", ex = "", exzh = "";
+    const parts = /\t/.test(line) ? line.split("\t") : /[|｜]/.test(line) ? line.split(/[|｜]/) : null;
+    if (parts){ [w, zh, ex, exzh] = [0, 1, 2, 3].map(i => (parts[i] || "").trim()); }
+    else { const m = line.match(/^([A-Za-z][A-Za-z '\-]*?)[\s,，:：=]+((?:[(（]?[A-Za-z]{1,5}\.[)）]?\s*)?[^\x00-\x7F].*)$/); if (m){ w = m[1]; zh = m[2].trim(); } }
+    w = w.replace(/\s+/g, " ").trim();
+    if (!w || !zh || !/^[A-Za-z][A-Za-z '\-]*$/.test(w)){ bad.push(line); return; }
+    const [pos, z] = splitPos(zh);
+    rows.push({ w, zh:z, pos, ex:braceEx(ex, w), exzh:ex ? exzh : "" });
+  });
+  return { rows, bad };
+}
+function addBulk(){
+  const ta = $("#bulkIn"), msg = $("#bulkMsg");
+  const { rows, bad } = parseMine(ta.value);
+  const have = new Set(state.custom.map(c => c.w.toLowerCase()));
+  let add = 0, dup = 0, full = 0;
+  rows.forEach(r => {
+    const id = r.w.toLowerCase();
+    if (have.has(id)){ dup++; return; }
+    if (state.custom.length >= MINE_MAX){ full++; return; }
+    have.add(id); state.custom.push(r); add++;
+  });
+  if (add){ rebuild(); if (state.today && !state.today.started) ensureToday(true); save(); renderAll(); }
+  const bits = [];
+  if (add) bits.push(`加入了 ${add} 個字`);
+  if (dup) bits.push(`${dup} 個已經有了，略過`);
+  if (full) bits.push(`${full} 個超過上限 ${MINE_MAX} 個，沒有加入`);
+  if (bad.length) bits.push(`${bad.length} 行看不懂，留在框裡給你修改`);
+  msg.textContent = bits.length ? bits.join("；") + "。" : "先把單字貼進框裡，一行一個字。";
+  msg.className = "form-msg " + (add && !bad.length ? "ok" : bad.length || !add ? "err" : "ok");
+  ta.value = bad.join("\n");
+}
+function mineText(){
+  return state.custom.map(c => [c.w, (c.pos ? c.pos + " " : "") + c.zh, (c.ex || "").replace(/[{}]/g, ""), c.exzh || ""].join(" | ").replace(/( \| )+$/, "")).join("\n");
+}
+async function copyMine(){
+  const msg = $("#bulkMsg"), t = mineText();
+  if (!t){ msg.textContent = "還沒有自己的單字。"; msg.className = "form-msg err"; return; }
+  try { await navigator.clipboard.writeText(t); msg.textContent = `已複製 ${state.custom.length} 個字的清單。傳給朋友，對方貼進這個框就能加入。`; msg.className = "form-msg ok"; }
+  catch (e) { const ta = $("#bulkIn"); ta.value = t; ta.select(); msg.textContent = "這個瀏覽器不能自動複製，清單已經放在框裡，請長按全選後複製。"; msg.className = "form-msg err"; }
+}
+function renderMine(){
+  const n = state.custom.length, box = $("#mineBox"); if (!box) return;
+  $("#mineSum").textContent = n ? `我的單字（${n} 個）` : "加入自己的字";
+  box.hidden = !n;
+  if (!n) return;
+  const mix = state.settings.mixMine !== false;
+  box.innerHTML = `<p class="hint">${isMine() ? "現在只背「我的單字」。" : "想只背這些字，按下面的按鈕；之後可以在「設定」的字庫切回來。"}</p>
+    <div class="rowacts">${isMine() ? `<button type="button" class="btn small" data-mine="back">切回${esc((PACKS.find(p => p.id === "gsat") || {}).name || "學測")}</button>` : `<button type="button" class="btn primary small" data-mine="only">只背我的單字</button>`}<button type="button" class="btn small" data-mine="copy">複製清單分享</button></div>
+    <p class="hint">背其他字庫時，要不要優先抽到我的單字：</p>
+    <div class="seg" role="group" aria-label="混進其他字庫" id="sMix"><button type="button" data-v="on" aria-pressed="${mix}">要</button><button type="button" data-v="off" aria-pressed="${!mix}">不要</button></div>`;
+}
 function deleteCustom(id){
   state.custom = state.custom.filter(c => c.w.toLowerCase() !== id);
   delete state.prog[id];
@@ -1195,16 +1310,17 @@ function deleteCustom(id){
 }
 function addCustom(){
   const f = $("#addForm"), get = n => f.querySelector(`[name="${n}"]`).value.trim();
-  const w = get("w").replace(/\s+/g, " "), zh = get("zh"), pos = get("pos"), ex = get("ex");
+  const w = get("w").replace(/\s+/g, " "), zh = get("zh"), pos = get("pos"), ex = braceEx(get("ex"), get("w").replace(/\s+/g, " ")), exzh = ex ? get("exzh") : "";
   const msg = $("#addMsg");
   const fail = t => { msg.textContent = t; msg.className = "form-msg err"; };
   if (!w || !zh) return fail("英文單字和中文意思都要填。");
   if (!/^[A-Za-z][A-Za-z '\-]*$/.test(w)) return fail("英文單字只能用英文字母、空格、連字號或撇號。");
-  if (BYID.has(w.toLowerCase()) || WORDS.some(x => x.k.toLowerCase() === w.toLowerCase())) return fail(`字庫裡已經有 ${w} 了。`);
-  state.custom.push({ w, zh, pos, ex });
+  if (mineEntry(w.toLowerCase())) return fail(`我的單字裡已經有 ${w} 了。`);
+  if (state.custom.length >= MINE_MAX) return fail(`我的單字最多 ${MINE_MAX} 個。`);
+  state.custom.push({ w, zh, pos, ex, exzh });
   rebuild(); save(); renderLib();
   f.querySelectorAll("input").forEach(i => { i.value = ""; });
-  msg.textContent = `已加入 ${w}。之後抽新字時會優先抽到它。`; msg.className = "form-msg ok";
+  msg.textContent = `已加入 ${w}。`; msg.className = "form-msg ok";
   f.querySelector('[name="w"]').focus();
 }
 
@@ -1331,7 +1447,7 @@ let resetArmed = false, resetTimer = null, delTimer = null;
 function setPressed(sel, v){ document.querySelectorAll(sel + " button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
 function renderSet(){
   const s = state.settings;
-  const unlocked = PACKS.filter(p => PACK_WORDS[p.id]);
+  const unlocked = PACKS.filter(p => PACK_WORDS[p.id] && (p.id !== "mine" || state.custom.length));
   $("#packGroup").hidden = false;
   const hsU = !!(state.hs && state.hs.ok);
   $("#sPack").innerHTML = unlocked.map(p => `<button type="button" data-v="${esc(p.id)}" aria-pressed="${!hsOn() && p.id === curPackId()}">${esc(p.name)}</button>`).join("") + (hsU ? `<button type="button" data-v="hs" aria-pressed="${hsOn()}">同等學力</button>` : "");
@@ -1640,6 +1756,135 @@ function hsClick(b){
   else if (a === "quit"){ const R = hsv.run; if (R && Object.keys(R.picks).length){ R.ids = R.ids.slice(0, R.pos + (R.picks[R.ids[R.pos]] !== undefined ? 1 : 0)); R.cut = true; if (R.ids.length){ R.pos = R.ids.length - 1; hsNext(); return; } } hsv.page = "sub"; hsv.run = null; renderHs(); }
 }
 
+/* ---------- 托福真題閱讀（兌換碼解鎖的私人題庫，資料在加密字庫的 tf 欄位） ---------- */
+let TF = null, tfv = { page:"home", sec:null, item:null };
+const TF_SEC = { ctw:{ name:"Complete the Words", zh:"補字題", tip:"依照上下文，把每個字缺少的字母補完。每篇 10 格。" },
+  dl:{ name:"Read in Daily Life", zh:"日常閱讀", tip:"公告、廣告、課程介紹這類生活短文。" },
+  ap:{ name:"Read an Academic Passage", zh:"學術閱讀", tip:"學術短文，含字義、推論、句子插入題。" } };
+function tfPrep(data){
+  TF = data; TF.byId = new Map();
+  (TF.sets || []).forEach(s => (s.items || []).forEach(it => {
+    it.set = s;
+    if (it.type === "ctw"){ it.blanks = []; it.text.replace(/([A-Za-z]+)\{([A-Za-z]+)\}/g, (m, pre, rest) => { it.blanks.push({ pre, rest }); return m; }); }
+    TF.byId.set(it.id, it);
+  }));
+}
+function tfState(){
+  if (!state.tf || typeof state.tf !== "object") state.tf = {};
+  const t = state.tf;
+  if (!t.ans || typeof t.ans !== "object") t.ans = {};
+  if (!t.ctw || typeof t.ctw !== "object") t.ctw = {};
+  return t;
+}
+function tfSet(){ if (!TF || !TF.sets || !TF.sets.length) return null; const id = tfState().set; return TF.sets.find(s => s.id === id) || TF.sets[TF.sets.length - 1]; }
+function tfItems(sec, set){ const s = set || tfSet(); return s ? s.items.filter(it => !sec || it.sec === sec) : []; }
+function tfAll(sec){ return TF && TF.sets ? TF.sets.reduce((a, s) => a.concat(tfItems(sec, s)), []) : []; }
+function tfScore(it){
+  const t = tfState();
+  if (it.type === "ctw"){
+    const c = t.ctw[it.id]; if (!c || !c.done) return null;
+    return { r:it.blanks.filter((b, i) => tfOkWord(b, (c.v || [])[i])).length, n:it.blanks.length };
+  }
+  const done = it.qs.filter(q => t.ans[q.id] != null); if (done.length < it.qs.length) return done.length ? { part:done.length, n:it.qs.length } : null;
+  return { r:it.qs.filter(q => t.ans[q.id] === q.a).length, n:it.qs.length };
+}
+function tfOkWord(b, v){ return String(v || "").trim().toLowerCase() === b.rest.toLowerCase(); }
+function tfBadge(it){
+  const s = tfScore(it);
+  if (!s) return "還沒做";
+  if (s.part != null) return `做到 ${s.part}／${s.n}`;
+  return `答對 ${s.r}／${s.n}`;
+}
+function tfOpen(id){ const it = TF.byId.get(id); if (!it) return; tfv.page = "item"; tfv.item = id; tfv.sec = it.sec; renderTf(); window.scrollTo(0, 0); }
+function tfNextId(it){ const L = tfItems(it.sec, it.set), i = L.indexOf(it); return L[i + 1] ? L[i + 1].id : null; }
+function tfCtwHtml(it, done, vals){
+  let i = 0;
+  return it.text.replace(/([A-Za-z]+)\{([A-Za-z]+)\}/g, (m, pre, rest) => {
+    const k = i++, v = vals[k] || "", n = rest.length;
+    if (!done) return `<span class="ctw"><b>${esc(pre)}</b><input class="ctwin" data-i="${k}" value="${esc(v)}" maxlength="${n}" style="width:calc(${n}ch + .45em)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next" aria-label="第 ${k + 1} 格：${esc(pre)} 後面還有 ${n} 個字母"></span>`;
+    const ok = tfOkWord({ rest }, v);
+    return `<span class="ctw ${ok ? "ok" : "no"}"><b>${esc(pre)}</b><u>${esc(rest)}</u>${ok ? "" : `<s aria-label="你寫的">${v ? esc(v) : "空白"}</s>`}</span>`;
+  });
+}
+function renderTf(){
+  const v = $("#view-tf");
+  if (!TF){ v.innerHTML = `<p class="lede">還沒解鎖托福真題。到「設定 → 字庫」輸入兌換碼。</p>`; return; }
+  const t = tfState(), set = tfSet();
+  if (tfv.page === "home"){
+    setMood("idle", "tf-home");
+    const secs = ["ctw", "dl", "ap"].map(sec => {
+      const L = tfItems(sec); if (!L.length) return "";
+      const rows = L.map(it => { const s = tfScore(it), cls = !s ? "" : s.part != null ? " part" : s.r === s.n ? " full" : " some";
+        return `<li><button type="button" class="tfitem${cls}" data-tf="open" data-v="${esc(it.id)}"><span lang="en">${esc(it.title)}</span><small>${tfBadge(it)}</small></button></li>`; }).join("");
+      const tot = L.reduce((a, it) => { const s = tfScore(it); if (s && s.part == null){ a.r += s.r; a.n += s.n; } return a; }, { r:0, n:0 });
+      return `<h3 class="sub">${TF_SEC[sec].zh}・<span lang="en">${TF_SEC[sec].name}</span></h3><p class="hint">${TF_SEC[sec].tip}共 ${L.length} 篇${tot.n ? `，目前答對 ${tot.r}／${tot.n}` : ""}。</p><ul class="tflist">${rows}</ul>`;
+    }).join("");
+    const pk = PACKS.find(p => p.id === "toeflcn"), nW = (PACK_WORDS.toeflcn || []).length;
+    v.innerHTML = buddyHtml("") + `<p class="step"><button type="button" class="linkbtn" data-tab-go="drill">← 練習</button></p>
+      <h2>托福真題・閱讀</h2>
+      ${TF.sets.length > 1 ? `<div class="seg tfsets" role="group" aria-label="選擇哪一套">${TF.sets.map(s => { const L = tfItems("", s), done = L.filter(it => { const x = tfScore(it); return x && x.part == null; }).length;
+        return `<button type="button" data-tf="set" data-v="${esc(s.id)}" aria-pressed="${s === set}">${esc(s.short || s.title)}<small>${done}／${L.length} 篇</small></button>`; }).join("")}</div>` : ""}
+      <p class="hint">${esc(set.title)}。答案依原檔的參考答案；原檔沒有附解析。</p>
+      ${nW && pk ? `<div class="actions"><button type="button" class="btn" data-tf="words">${curPackId() === "toeflcn" ? "正在背" : "改背"}托福真題生字（${nW} 個${TF.sets.length > 1 ? "，各套合在一起" : ""}）</button></div>` : ""}
+      ${secs}
+      <p class="hint">這是私人題庫，只有輸入兌換碼的人看得到，請不要轉傳截圖或內容。</p>`;
+    hookImgs(v); return;
+  }
+  const it = TF.byId.get(tfv.item); if (!it){ tfv.page = "home"; renderTf(); return; }
+  const nx = tfNextId(it), back = `<p class="step"><button type="button" class="linkbtn" data-tf="home">← 托福真題</button></p>`;
+  const head = `<p class="hint">${TF_SEC[it.sec].zh}${it.mod ? `・Module ${it.mod}` : ""}${it.task ? `・<span lang="en">${esc(it.task)}</span>` : ""}${TF.sets.length > 1 && it.set ? `・${esc(it.set.short || it.set.title)}` : ""}</p><h2 lang="en" class="tftitle">${esc(it.title)}</h2>${it.note ? `<p class="hint tfnote">${esc(it.note)}</p>` : ""}`;
+  if (it.type === "ctw"){
+    const c = t.ctw[it.id] || { v:[], done:false }, sc = tfScore(it);
+    const wrong = c.done ? it.blanks.map((b, i) => tfOkWord(b, (c.v || [])[i]) ? "" : b.pre + b.rest).filter(Boolean) : [];
+    v.innerHTML = (c.done ? buddyHtml(sc.r >= 8 ? "bounce" : "shake") : "") + back + head + `
+      <article class="card tfp ctwp" lang="en">${tfCtwHtml(it, c.done, c.v || [])}</article>
+      ${c.done ? `<p class="feedback ${sc.r === sc.n ? "ok" : "no"}">答對 ${sc.r}／${sc.n} 格。${wrong.length ? `要再記一下的字：<span lang="en">${wrong.map(esc).join("、")}</span>` : "全對！"}</p>
+        <div class="actions row">${nx ? `<button class="btn primary" type="button" data-tf="open" data-v="${nx}">下一篇</button>` : `<button class="btn primary" type="button" data-tf="home">回目錄</button>`}<button class="btn" type="button" data-tf="redo" data-v="${it.id}">重做這篇</button></div>`
+      : `<p class="hint">底線前的字母已經給了，只要補後面缺的字母，格子寬度就是缺幾個字母。輸入完一格按 Enter 跳到下一格。</p>
+        <div class="actions row"><button class="btn primary" type="button" data-tf="check" data-v="${it.id}">對答案</button></div>`}`;
+    if (c.done) setMood(sc.r >= 8 ? "happy" : "sad", "tfc-" + it.id + "-" + sc.r);
+    hookImgs(v); return;
+  }
+  const qs = it.qs, allDone = qs.every(q => t.ans[q.id] != null), sc = tfScore(it);
+  const qHtml = qs.map((q, qi) => {
+    const p = t.ans[q.id], answered = p != null, ok = p === q.a;
+    return `<div class="tfq" id="tfq-${q.id}"><p class="tfstem"><b class="qn">${qi + 1}.</b><span${q.k === "ins" ? "" : ' lang="en"'}>${q.q}</span></p>
+      <ul class="opts">${q.o.map((o, i) => { let cls = "opt en"; if (answered){ if (i === q.a) cls += " right"; else if (i === p) cls += " wrong"; }
+        return `<li><button type="button" class="${cls}" data-tf="pick" data-q="${q.id}" data-v="${i}"${answered ? " disabled" : ""}><span class="key">${"ABCD"[i]}</span><span>${o}</span></button></li>`; }).join("")}</ul>
+      ${answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "答對了。" : `答錯了，正確答案是 (${"ABCD"[q.a]})。`}</p>` : ""}</div>`;
+  }).join("");
+  v.innerHTML = back + head + `<article class="card tfp" lang="en">${it.paras.map(p => `<p>${p}</p>`).join("")}</article>
+    <p class="hint">共 ${qs.length} 題，點選項就會馬上對答案。原卷題號 Q${qs[0].n}–Q${qs[qs.length - 1].n}。</p>
+    ${qHtml}
+    ${allDone ? `<p class="feedback ${sc.r === sc.n ? "ok" : "no"}">這篇答對 ${sc.r}／${sc.n} 題。</p><div class="actions row">${nx ? `<button class="btn primary" type="button" data-tf="open" data-v="${nx}">下一篇</button>` : `<button class="btn primary" type="button" data-tf="home">回目錄</button>`}<button class="btn" type="button" data-tf="redo" data-v="${it.id}">重做這篇</button></div>` : ""}`;
+  hookImgs(v);
+}
+function tfClick(b){
+  const a = b.dataset.tf, val = b.dataset.v, t = tfState();
+  if (a === "home"){ tfv.page = "home"; renderTf(); window.scrollTo(0, 0); }
+  else if (a === "open") tfOpen(val);
+  else if (a === "set"){ t.set = val; save(); renderTf(); }
+  else if (a === "words"){ if (PACK_WORDS.toeflcn){ switchPack("toeflcn"); showTab("today"); } }
+  else if (a === "redo"){ const it = TF.byId.get(val); if (!it) return; if (it.type === "ctw") delete t.ctw[it.id]; else it.qs.forEach(q => { delete t.ans[q.id]; }); save(); renderTf(); window.scrollTo(0, 0); }
+  else if (a === "check"){
+    const it = TF.byId.get(val); if (!it) return;
+    const vals = [...document.querySelectorAll("#view-tf .ctwin")].map(i => i.value.trim());
+    t.ctw[it.id] = { v:vals, done:true, at:Date.now() };
+    const r = it.blanks.filter((bk, i) => tfOkWord(bk, vals[i])).length;
+    logRun("tfctw", it.blanks.length, r, 0, it.blanks.filter((bk, i) => !tfOkWord(bk, vals[i])).map(bk => bk.pre + bk.rest));
+    save(); renderTf(); window.scrollTo(0, 0);
+  }
+  else if (a === "pick"){
+    const qid = b.dataset.q, it = TF.byId.get(qid.replace(/q\d+$/, "")); if (!it || t.ans[qid] != null) return;
+    t.ans[qid] = +val;
+    const q = it.qs.find(x => x.id === qid);
+    setMood(+val === q.a ? "happy" : "sad", "tfa-" + qid);
+    if (it.qs.every(x => t.ans[x.id] != null)) logRun("tfread", it.qs.length, it.qs.filter(x => t.ans[x.id] === x.a).length, 0);
+    save(); renderTf();
+    const el = document.getElementById("tfq-" + qid); if (el) el.scrollIntoView({ block:"nearest" });
+  }
+}
+
 /* ---------- navigation ---------- */
 function renderAll(){
   renderHeader(); renderToday();
@@ -1648,11 +1893,12 @@ function renderAll(){
   if (!$("#view-set").hidden) renderSet();
   if (!$("#view-log").hidden) renderLog();
   if (!$("#view-hs").hidden) renderHs();
+  if (!$("#view-tf").hidden) renderTf();
 }
 function showTab(t){
   if (test) return;
   ui.bkMsg = "";
-  ["today", "drill", "lib", "log", "set", "hs"].forEach(k => { $("#view-" + k).hidden = k !== t; });
+  ["today", "drill", "lib", "log", "set", "hs", "tf"].forEach(k => { $("#view-" + k).hidden = k !== t; });
   document.querySelectorAll("[data-tab]").forEach(b => { if (b.dataset.tab === t) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   if (t === "today") renderToday();
   if (t === "drill") renderDrill();
@@ -1660,6 +1906,7 @@ function showTab(t){
   if (t === "set") renderSet();
   if (t === "log") renderLog();
   if (t === "hs") renderHs();
+  if (t === "tf"){ tfv.page = "home"; renderTf(); }
   window.scrollTo(0, 0);
 }
 function focusMain(){
@@ -1690,6 +1937,8 @@ document.addEventListener("click", e => {
     else if (a === "ok" && test) confirmTest();
     return;
   }
+  const tfb = e.target.closest("[data-tf]");
+  if (tfb && !tfb.disabled){ tfClick(tfb); return; }
   const hb = e.target.closest("[data-hs]");
   if (hb && !hb.disabled){ hsClick(hb); return; }
   const fl = e.target.closest("[data-fill]");
@@ -1729,6 +1978,14 @@ document.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229){ e.preventDefault(); const bb = $('[data-hs="fill"]'); if (bb) hsClick(bb); }
     return;
   }
+  if (e.target.classList && e.target.classList.contains("ctwin")){
+    if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229){
+      e.preventDefault();
+      const all = [...document.querySelectorAll("#view-tf .ctwin")], i = all.indexOf(e.target);
+      if (all[i + 1]) all[i + 1].focus(); else { const cb = $('[data-tf="check"]'); if (cb) cb.focus(); }
+    }
+    return;
+  }
   if (e.target.id === "spellIn"){
     if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229){ e.preventDefault(); drillCheckSpell(); }
     return;
@@ -1747,6 +2004,14 @@ document.addEventListener("keydown", e => {
   }
 });
 
+document.addEventListener("input", e => {
+  if (e.target.classList && e.target.classList.contains("ctwin") && tfv.item){
+    const all = [...document.querySelectorAll("#view-tf .ctwin")], t = tfState();
+    t.ctw[tfv.item] = { v:all.map(i => i.value), done:false };
+    if (e.target.value.length >= +e.target.maxLength && !e.isComposing){ const nx = all[all.indexOf(e.target) + 1]; if (nx) nx.focus({ preventScroll:false }); }
+    clearTimeout(tfv.st); tfv.st = setTimeout(save, 600); return;
+  }
+});
 document.addEventListener("input", e => { if (e.target.id === "hsEssay"){ hsState().essay[e.target.dataset.id] = e.target.value; const c = $("#hsCount"); if (c) c.textContent = [...e.target.value.replace(/\s/g, "")].length + " 字・自動儲存"; clearTimeout(hsv.st); hsv.st = setTimeout(save, 600); } });
 $("#view-lib").addEventListener("change", e => { if (e.target.id === "lvSel"){ ui.lv = e.target.value; ui.open = null; ui.limit = LIB_PAGE; renderLib(); } });
 $("#q").addEventListener("input", e => { ui.q = e.target.value; ui.open = null; ui.limit = LIB_PAGE; renderLib(); });
@@ -1761,7 +2026,10 @@ $("#view-lib").addEventListener("click", e => {
   const b = e.target.closest("[data-lib]"); if (!b) return;
   const id = b.dataset.id;
   if (b.dataset.lib === "more"){ ui.limit += LIB_PAGE; renderLib(); return; }
-  if (b.dataset.lib === "toggle"){ ui.open = ui.open === id ? null : id; ui.delArm = null; renderLib(); refocusRow(id, "toggle"); return; }
+  if (b.dataset.lib === "toggle"){ ui.open = ui.open === id ? null : id; ui.delArm = null; ui.edit = null; renderLib(); refocusRow(id, "toggle"); return; }
+  if (b.dataset.lib === "edit"){ ui.edit = id; ui.delArm = null; renderLib(); const i = document.querySelector('.editform [data-ed="ex"]'); if (i) i.focus(); return; }
+  if (b.dataset.lib === "cancel"){ ui.edit = null; renderLib(); return; }
+  if (b.dataset.lib === "save"){ saveEdit(id); return; }
   if (b.dataset.lib === "del"){
     if (ui.delArm !== id){
       ui.delArm = id; renderLib(); refocusRow(id, "del");
@@ -1772,6 +2040,18 @@ $("#view-lib").addEventListener("click", e => {
   }
 });
 $("#addBtn").addEventListener("click", addCustom);
+$("#bulkBtn").addEventListener("click", addBulk);
+$("#mineBox").addEventListener("click", e => {
+  const m = e.target.closest("[data-mine]");
+  if (m){
+    if (m.dataset.mine === "copy"){ copyMine(); return; }
+    if (hsOn()) leaveHs();
+    switchPack(m.dataset.mine === "only" ? "mine" : "gsat"); return;
+  }
+  const seg = e.target.closest("#sMix button");
+  if (seg){ state.settings.mixMine = seg.dataset.v === "on"; rebuild(); sanitizeToday(); if (state.today && !state.today.started) ensureToday(true); save(); renderAll(); }
+});
+$("#list").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229 && e.target.matches("[data-ed]")){ e.preventDefault(); const box = e.target.closest(".editform"); if (box) saveEdit(box.dataset.id); } });
 $("#addForm").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229 && e.target.tagName === "INPUT"){ e.preventDefault(); addCustom(); } });
 
 $("#view-set").addEventListener("click", e => {
@@ -1845,6 +2125,7 @@ async function load(){
     const cfgPacks = (CFG && Array.isArray(CFG.packs)) ? CFG.packs : [];
     PACKS = cfgPacks.filter(p => p && p.id).map(p => Object.assign({}, p));
     if (!PACKS.some(p => p.id === "gsat")) PACKS.unshift({ id:"gsat", name:"學測", levels:[] });
+    if (!PACKS.some(p => p.id === "mine")) PACKS.push({ id:"mine", name:"我的單字", levels:[] });
     await loadUnlocked();
   } catch (e) {
     $("#view-load").innerHTML = `<p class="lede">字庫載入失敗。</p><p class="hint">如果是直接在電腦上點開 index.html，瀏覽器會擋住讀檔；請放到 GitHub Pages，或在資料夾裡執行 <code>python3 -m http.server</code> 再打開。</p>`;
