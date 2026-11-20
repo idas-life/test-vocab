@@ -555,3 +555,9 @@ textarea.field{width:100%;font:inherit;line-height:1.5;resize:vertical;min-heigh
 .ntmb{white-space:pre-wrap;word-break:break-word}
 .ntform{margin-top:.8rem}
 .ntsec>summary{-webkit-tap-highlight-color:transparent}
+.ntorig{margin:.5rem 0}
+.ntorig>summary{cursor:pointer;color:var(--ink-soft);font-size:.92rem}
+.ntsec{min-width:0}
+.ntbody .dtab td,.ntbody .dtab th{white-space:normal;text-align:left;min-width:4.5em}
+.ntbody .dtab td:first-child{min-width:5.5em}
+.ntbody li{overflow-wrap:anywhere}
