@@ -79,9 +79,10 @@ function mainPos(p){ return String(p || "").replace(/[()]/g, "").split("/")[0].r
 let CFG = null, BANK = [], ALLW = [], PACK_WORDS = {}, PACKS = [], EX = {}, PASS = [], FILL = [], CHARS = { base:"img/", characters:[] }, FB_CFG = null;
 let WORDS = [], BYID = new Map(), BANK_IDS = new Set();
 
+function cleanPh(p){ return String(p || "").replace(/<[^>]*>/g, "").replace(/&nbsp;|\u00a0/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim(); }
 function prepWord(r){
   const m = Array.isArray(r.m) && r.m.length ? r.m : [[r.pos || "", r.zh || ""]];
-  const w = { id:r.id, w:r.w, k:r.k || r.w, pos:r.pos || "", lv:r.lv || 0, m, x:r.x || "", tag:r.tag || "", ph:r.ph || "", o:r.o || 0 };
+  const w = { id:r.id, w:r.w, k:r.k || r.w, pos:r.pos || "", lv:r.lv || 0, m, x:r.x || "", tag:r.tag || "", ph:cleanPh(r.ph), o:r.o || 0 };
   w.zh = m.map(s => s[1]).join("；");
   const e = EX[r.id];
   if (e) w.ex = { s:e[0], zh:e[1], pos:e[2], code:e[3] };
@@ -637,7 +638,7 @@ function renderHeader(){
 }
 function sayBtn(w){ return canSay && curPack().speech !== null && curPack().speech !== "" ? `<button class="say" type="button" data-act="say" data-w="${esc(w)}" aria-label="唸出 ${esc(w)}">${SPEAKER}<span>發音</span></button>` : ""; }
 function lvTag(w){ if (w.tag === "M") return `<span class="tag">自訂</span>`; const pk = PACKS.find(p => p.id === w.pk); return `<span class="tag lv">${w.pk && w.pk !== "gsat" && pk ? esc(pk.name) + "・" : ""}${esc(lvName(w.lv, pk))}</span>`; }
-function metaRow(w){ return `<p class="meta">${lvTag(w)}<span class="pos" lang="en">${esc(w.pos)}</span>${w.ph ? `<span class="ph" lang="en">/${esc(w.ph)}/</span>` : ""}</p>`; }
+function metaRow(w, showPh = true){ return `<p class="meta">${lvTag(w)}<span class="pos" lang="en">${esc(w.pos)}</span>${w.ph && showPh ? `<span class="ph" lang="en">/${esc(w.ph)}/</span>` : ""}</p>`; }
 function sensesHtml(w){ return `<ul class="senses">${w.m.map(s => `<li>${s[0] ? `<span class="pos" lang="en">${esc(s[0])}</span>` : ""}${esc(s[1])}</li>`).join("")}</ul>`; }
 function exLine(w){
   if (!w.ex) return "";
@@ -847,7 +848,7 @@ function renderTodayInner(){
     }
     const last = T.pos + 1 >= T.queue.length;
     v.innerHTML = buddyHtml(answered ? (ok ? "bounce" : "shake") : "") + `<p class="step"><span>考場</span>${T.pos + 1}／${T.queue.length}</p>
-      <article class="card">${deco(T.pos, "stk-card")}${metaRow(w)}${promptHtml(cur, w)}${answered ? revealHtml(cur, w) : ""}${answered && ok ? SEAL() : ""}</article>
+      <article class="card">${deco(T.pos, "stk-card")}${metaRow(w, answered)}${promptHtml(cur, w)}${answered ? revealHtml(cur, w) : ""}${answered && ok ? SEAL() : ""}</article>
       <div class="answered-bar"><p class="${fbCls}" aria-live="polite">${fb}</p>
       ${answered ? `<div class="actions"><button class="btn primary" type="button" data-act="next">${last ? "看放榜" : "下一題"}</button></div>` : ""}</div>
       <p class="ask">${askText(cur)}</p>
@@ -1224,7 +1225,7 @@ function renderDrill(){
   let fb = "";
   if (answered){ const right = q.type === "en2zh" ? shortZh(w) : q.type === "cloze" ? q.form : w.k; fb = ok ? `<p class="feedback ok" aria-live="polite">答對了。</p>` : `<p class="feedback no" aria-live="polite">答錯了，正確是「${esc(right)}」。</p>`; }
   v.innerHTML = buddyHtml(answered ? (ok ? "bounce" : "shake") : "") + head + `
-    <article class="card">${deco(drill.pos, "stk-card")}${metaRow(w)}${promptHtml(q, w)}${answered ? revealHtml(q, w) : ""}${answered && ok ? SEAL() : ""}</article>
+    <article class="card">${deco(drill.pos, "stk-card")}${metaRow(w, answered)}${promptHtml(q, w)}${answered ? revealHtml(q, w) : ""}${answered && ok ? SEAL() : ""}</article>
     <div class="answered-bar">${fb}${nextBtn}</div>
     <p class="ask">${askText(q)}</p>
     <ul class="opts">${optsHtml(q, "dpick").replace(/data-act="dpick"/g, 'data-drill="pick"')}</ul>`;
