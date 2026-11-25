@@ -76,13 +76,13 @@ document.addEventListener("pointerdown", () => { kbd = false; }, true);
 function mainPos(p){ return String(p || "").replace(/[()]/g, "").split("/")[0].replace(/\.$/, ""); }
 
 /* ---------- data ---------- */
-let CFG = null, BANK = [], ALLW = [], PACK_WORDS = {}, PACKS = [], EX = {}, PASS = [], FILL = [], CHARS = { base:"img/", characters:[] }, FB_CFG = null;
+let CFG = null, BANK = [], ALLW = [], PACK_WORDS = {}, PACKS = [], EX = {}, PASS = [], FILL = [], CHARS = { base:"img/", characters:[] };
 let WORDS = [], BYID = new Map(), BANK_IDS = new Set();
 
 function cleanPh(p){ return String(p || "").replace(/<[^>]*>/g, "").replace(/&nbsp;|\u00a0/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim(); }
 function prepWord(r){
   const m = Array.isArray(r.m) && r.m.length ? r.m : [[r.pos || "", r.zh || ""]];
-  const w = { id:r.id, w:r.w, k:r.k || r.w, pos:r.pos || "", lv:r.lv || 0, m, x:r.x || "", tag:r.tag || "", ph:cleanPh(r.ph), o:r.o || 0 };
+  const w = { id:r.id, w:r.w, k:r.k || r.w, pos:r.pos || "", lv:r.lv || 0, m, x:r.x || "", tag:r.tag || "", ph:cleanPh(r.ph), o:r.o || 0, au:r.au || "", exau:r.exau || "" };
   w.zh = m.map(s => s[1]).join("；");
   const e = EX[r.id];
   if (e) w.ex = { s:e[0], zh:e[1], pos:e[2], code:e[3] };
@@ -99,7 +99,7 @@ const ui = { q:"", lv:"all", st:"all", open:null, delArm:null, limit:LIB_PAGE, m
 
 function freshState(){
   return { v:1, updatedAt:0, prog:{}, xp:0, streak:0, best:0, lastDay:null, history:{}, custom:[], today:null,
-           placement:null, drills:{ seen:[], pseen:[], fseen:[], right:0, total:0 }, log:[], sync:{ code:"" }, unlocks:{}, packStart:{},
+           placement:null, drills:{ seen:[], pseen:[], fseen:[], right:0, total:0 }, log:[], sync:{ code:"" }, unlocks:{}, packStart:{}, exams:{},
            settings:{ daily:20, startLv:3, autoSay:false, theme:"auto", char:"", charChosen:false } };
 }
 function normalize(s){
@@ -115,6 +115,7 @@ function normalize(s){
   out.sync = Object.assign({ code:"" }, s.sync || {});
   if (!out.unlocks || typeof out.unlocks !== "object") out.unlocks = {};
   if (!out.packStart || typeof out.packStart !== "object") out.packStart = {};
+  if (!out.exams || typeof out.exams !== "object") out.exams = {};
   if (!out.prog || typeof out.prog !== "object") out.prog = {};
   if (!Array.isArray(out.custom)) out.custom = [];
   if (!out.history || typeof out.history !== "object") out.history = {};
@@ -204,7 +205,7 @@ async function decryptPack(file, code){
   return JSON.parse(new TextDecoder().decode(plain));
 }
 function mountPack(meta, data){
-  Object.assign(meta, { name:meta.name || data.name, levels:data.levels || meta.levels || [], speech:data.speech !== undefined ? data.speech : meta.speech, exam:data.exam || meta.exam, idPrefix:data.idPrefix || meta.idPrefix, order:!!data.order });
+  Object.assign(meta, { name:meta.name || data.name, levels:data.levels || meta.levels || [], speech:data.speech !== undefined ? data.speech : meta.speech, exam:data.exam || meta.exam, idPrefix:data.idPrefix || meta.idPrefix, order:!!data.order, source:data.source || meta.source || "" });
   addPackWords(meta, data.words || []);
   if (data.tf) tfPrep(data.tf);
   if (data.notes) NOTES = data.notes;
@@ -262,7 +263,7 @@ async function loadUnlocked(){
     if (!meta.locked && meta.file){ try { mountPack(meta, await getJSON(meta.file)); } catch (e) {} continue; }
     const code = state.unlocks[meta.id];
     if (!meta.locked || !code) continue;
-    try { mountPack(meta, await decryptPack(meta.file, code)); } catch (e) {}
+    try { mountPack(meta, meta.plain ? await getJSON(meta.file) : await decryptPack(meta.file, code)); } catch (e) {}
   }
 }
 async function redeem(raw){
@@ -274,8 +275,17 @@ async function redeem(raw){
     $("#redeemIn").value = ""; enterHs();
     msg.textContent = "解鎖了「同等學力」，已經切換過去。之後可以在這裡的「字庫」切回單字。"; return;
   }
+  const h = await sha256Hex(code);
   for (const meta of PACKS){
-    if (!meta.locked || PACK_WORDS[meta.id]) continue;
+    if (!meta.plain || meta.hash !== h) continue;
+    if (PACK_WORDS[meta.id]){ switchPack(meta.id); msg.textContent = `「${meta.name}」已經解鎖過了，已經切換過去。`; $("#redeemIn").value = ""; return; }
+    try { mountPack(meta, await getJSON(meta.file)); } catch (e) { msg.textContent = "字庫載入失敗，請確認有網路再試一次。"; return; }
+    state.unlocks[meta.id] = code; switchPack(meta.id);
+    msg.textContent = `解鎖了「${meta.name}」，已經切換過去。按「發音」會播族語E樂園的錄音。`; $("#redeemIn").value = "";
+    return;
+  }
+  for (const meta of PACKS){
+    if (!meta.locked || meta.plain || PACK_WORDS[meta.id]) continue;
     try {
       const data = await decryptPack(meta.file, code);
       mountPack(meta, data); state.unlocks[meta.id] = code;
@@ -352,7 +362,16 @@ function pickNew(n, exclude){
     .sort((a, b) => a[0] - b[0]).slice(0, n).map(x => x[1].id);
 }
 function remainingFrom(lv){ return WORDS.filter(w => w.lv >= lv && !state.prog[w.id]).length; }
-function daysLeft(){ return Math.max(0, EXAM_DAY - dayNum()); }
+/* exam countdown: one per word pack; 學測 has a default */
+function examOf(id = curPackId()){
+  const e = state.exams && state.exams[id];
+  if (e) return e.name && e.date ? e : null;
+  return id === "gsat" ? { name:"學測", date:dayKey(EXAM_DAY) } : null;
+}
+const examDay = e => Math.floor(Date.parse(e.date + "T00:00:00Z") / 86400000);
+const exName = () => (examOf() || {}).name || "考試";
+function examLeft(){ const e = examOf(); return e ? examDay(e) - dayNum() : null; }
+function daysLeft(){ const l = examLeft(); return l == null ? 0 : Math.max(0, l); }
 
 /* how far the chosen pace reaches before the exam */
 function coverage(daily, startLv){
@@ -372,9 +391,9 @@ function suggestDaily(startLv){
 function paceText(daily, startLv){
   const r = coverage(daily, startLv), left = daysLeft();
   if (!left) return "";
-  if (r >= 6) return `每天 ${daily} 個新字，學測前可以把第 ${startLv}–6 級都背過一輪。`;
-  if (r < startLv) return `每天 ${daily} 個新字，學測前還背不完第 ${startLv} 級。`;
-  return `每天 ${daily} 個新字，學測前可以背完第 ${startLv}–${r} 級。要全部背完，每天大約要 ${neededDaily(startLv)} 個。`;
+  if (r >= 6) return `每天 ${daily} 個新字，${exName()}前可以把第 ${startLv}–6 級都背過一輪。`;
+  if (r < startLv) return `每天 ${daily} 個新字，${exName()}前還背不完第 ${startLv} 級。`;
+  return `每天 ${daily} 個新字，${exName()}前可以背完第 ${startLv}–${r} 級。要全部背完，每天大約要 ${neededDaily(startLv)} 個。`;
 }
 
 /* ---------- today ---------- */
@@ -595,7 +614,19 @@ function pickVoice(){
   } catch (e) {}
 }
 if (canSay){ pickVoice(); try { speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) {} }
+let audioEl = null;
+function playUrl(u){
+  try { if (canSay) speechSynthesis.cancel(); if (audioEl) audioEl.pause(); audioEl = new Audio(u); const p = audioEl.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+}
+function audioFor(text){
+  if (curPack().speech !== "audio" || !text) return "";
+  const k = String(text).toLowerCase(), w = (PACK_WORDS[curPackId()] || []).find(x => x.au && x.k.toLowerCase() === k);
+  return w ? w.au : "";
+}
 function say(text){
+  const au = audioFor(text);
+  if (au){ playUrl(au); return; }
+  if (curPack().speech === "audio") return;
   if (!canSay || !text) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = "en-US"; u.rate = 0.9; if (voice) u.voice = voice; speechSynthesis.speak(u); } catch (e) {}
 }
@@ -631,19 +662,24 @@ function renderHeader(){
     li.setAttribute("aria-label", `${dayKey(n)}${on ? "，有完成" : "，沒有完成"}`);
     week.appendChild(li);
   }
-  const left = EXAM_DAY - t;
-  if (!isGsat()){ const pk = curPack(); $("#countdown").innerHTML = `目前字庫：<b class="pk">${esc(pk.name)}</b>` + deco(1, "stk-cd"); }
-  else $("#countdown").innerHTML = (left > 0 ? `離學測（1 月 22 日）還有<b>${left}</b>天` : left === 0 ? "今天學測，加油！" : "學測結束了，辛苦了！") + deco(1, "stk-cd");
+  const ex = examOf(), left = examLeft();
+  let cd = "";
+  if (ex){
+    const [, mm, dd] = ex.date.split("-").map(Number), nm = esc(ex.name);
+    cd = left > 0 ? `離${nm}（${mm} 月 ${dd} 日）還有<b>${left}</b>天` : left === 0 ? `今天${nm}，加油！` : `${nm}結束了，辛苦了！`;
+  }
+  if (!isGsat()){ const pk = curPack(); cd = `目前字庫：<b class="pk">${esc(pk.name)}</b>` + (ex && left >= 0 ? `<span class="cdex">・${cd}</span>` : ""); }
+  $("#countdown").innerHTML = cd + deco(1, "stk-cd");
   if (pulsePlaque){ pulsePlaque = false; pl.classList.remove("pulse"); void pl.offsetWidth; pl.classList.add("pulse"); }
 }
-function sayBtn(w){ return canSay && curPack().speech !== null && curPack().speech !== "" ? `<button class="say" type="button" data-act="say" data-w="${esc(w)}" aria-label="唸出 ${esc(w)}">${SPEAKER}<span>發音</span></button>` : ""; }
+function sayBtn(w){ return (curPack().speech === "audio" ? !!audioFor(w) : canSay && curPack().speech !== null && curPack().speech !== "") ? `<button class="say" type="button" data-act="say" data-w="${esc(w)}" aria-label="唸出 ${esc(w)}">${SPEAKER}<span>發音</span></button>` : ""; }
 function lvTag(w){ if (w.tag === "M") return `<span class="tag">自訂</span>`; const pk = PACKS.find(p => p.id === w.pk); return `<span class="tag lv">${w.pk && w.pk !== "gsat" && pk ? esc(pk.name) + "・" : ""}${esc(lvName(w.lv, pk))}</span>`; }
 function metaRow(w, showPh = true){ return `<p class="meta">${lvTag(w)}<span class="pos" lang="en">${esc(w.pos)}</span>${w.ph && showPh ? `<span class="ph" lang="en">/${esc(w.ph)}/</span>` : ""}</p>`; }
 function sensesHtml(w){ return `<ul class="senses">${w.m.map(s => `<li>${s[0] ? `<span class="pos" lang="en">${esc(s[0])}</span>` : ""}${esc(s[1])}</li>`).join("")}</ul>`; }
 function exLine(w){
   if (!w.ex) return "";
   const s = esc(w.ex.s).replace(/\{([^}]+)\}/, "<b>$1</b>");
-  return `<p class="ex" lang="en">${s}${w.ex.zh ? `<span class="exzh" lang="zh-Hant">${esc(w.ex.zh)}</span>` : ""}</p>`;
+  return `<p class="ex" lang="en">${s}${w.exau && curPack().speech === "audio" ? ` <button class="say mini" type="button" data-act="playex" data-u="${esc(w.exau)}" aria-label="播放例句">${SPEAKER}</button>` : ""}${w.ex.zh ? `<span class="exzh" lang="zh-Hant">${esc(w.ex.zh)}</span>` : ""}</p>`;
 }
 function clozeHtml(w, filled){
   const parts = w.ex.s.split(/\{[^}]+\}/), m = w.ex.s.match(/\{([^}]+)\}/);
@@ -660,7 +696,8 @@ function revealHtml(q, w){
   if (q.type === "zh2en") return `<div class="wordrow"><p class="enreveal" lang="en">${esc(w.w)}</p>${sayBtn(w.k)}</div>${sensesHtml(w)}${exLine(w)}`;
   return `${w.ex.zh ? `<p class="exzh">${esc(w.ex.zh)}</p>` : ""}<div class="wordrow"><p class="enreveal" lang="en">${esc(w.w)}</p>${sayBtn(w.k)}</div>${sensesHtml(w)}`;
 }
-function askText(q){ return q.type === "en2zh" ? "選出中文意思" : q.type === "zh2en" ? "選出對應的英文字" : "選出最適合填入空格的字"; }
+const L2 = () => curPack().speech === "audio" ? "族語" : "英文";
+function askText(q){ return q.type === "en2zh" ? "選出中文意思" : q.type === "zh2en" ? `選出對應的${L2()}字` : "選出最適合填入空格的字"; }
 function optsHtml(q, act){
   return q.opts.map((o, i) => {
     let cls = "opt" + (q.type !== "en2zh" ? " en" : "");
@@ -744,7 +781,7 @@ function renderTest(v){
       <p class="hint">建議第 ${test.rec} 級。比它低的級數之後還是可以在字庫裡看。這次答對的字會先排進複習，不用重學。</p>
       <h3 class="sub">每天幾個新字</h3>
       <div class="seg" role="group" aria-label="每天新字數">${dbtns}</div>
-      <div class="plan-note"><p>從第 ${ch} 級開始共 ${remainingFrom(ch)} 個字，離學測 ${daysLeft()} 天。</p><p>${esc(paceText(test.daily, ch))}</p><p class="hint">之後在「設定」隨時可以改。</p></div>
+      <div class="plan-note"><p>從第 ${ch} 級開始共 ${remainingFrom(ch)} 個字${examOf() ? `，離${esc(exName())} ${daysLeft()} 天` : ""}。</p><p>${esc(paceText(test.daily, ch))}</p><p class="hint">之後在「設定」隨時可以改。</p></div>
       <div class="actions"><button class="btn primary" type="button" data-test="ok">就這樣開始</button></div>`;
     hookImgs(v); return;
   }
@@ -1183,7 +1220,7 @@ function renderDrill(){
         ${TF ? `<li><button type="button" class="mode tfmode" data-tab-go="tf"><b>托福真題・閱讀</b><span>${TF.sets.length > 1 ? `${TF.sets.map(s => esc(s.short || s.title)).join("、")} 共 ${TF.sets.length} 套` : esc((TF.sets[0] || {}).title || "")}：補字 ${tfAll("ctw").length} 篇、日常閱讀 ${tfAll("dl").length} 篇、學術閱讀 ${tfAll("ap").length} 篇。</span></button></li>` : ""}
         ${NOTES ? `<li><button type="button" class="mode tfmode" data-tab-go="note"><b>${esc(NOTES.name || "托福寫作模板")}</b><span>${NOTES.sections.map(x => esc(x.title)).slice(1, 5).join("、")}……共 ${NOTES.sections.length} 段${notesState().mine.length ? `，你補充了 ${notesState().mine.length} 則` : "，每段都可以補充自己的模板"}。</span></button></li>` : ""}
         <li><button type="button" class="mode" data-drill="go" data-mode="cloze"><b>詞彙題模擬</b><span>例句挖一個空格，四個詞性相同的選項，跟學測詞彙題一樣考「哪個字放進句子才通」。題庫 ${nEx} 句。</span></button></li>
-        <li><button type="button" class="mode" data-drill="go" data-mode="spell"><b>拼字</b><span>看中文拼出英文，練中譯英和作文用得到的字。${nLearned ? `從學過的 ${nLearned} 個字出題。` : "還沒學過字的話，會先從起始級數出題。"}</span></button></li>
+        <li><button type="button" class="mode" data-drill="go" data-mode="spell"><b>拼字</b><span>${L2() === "族語" ? "看中文拼出族語，熟悉拼寫。" : "看中文拼出英文，練中譯英和作文用得到的字。"}${nLearned ? `從學過的 ${nLearned} 個字出題。` : "還沒學過字的話，會先從起始級數出題。"}</span></button></li>
         <li><button type="button" class="mode" data-drill="go" data-mode="passage"><b>克漏字</b><span>一篇短文 5 個空格，照學測綜合測驗出：詞彙、片語、轉承詞、文法都有，每格附解析。共 ${PASS.length} 篇。</span></button></li>
         ${FILL.length ? `<li><button type="button" class="mode" data-drill="go" data-mode="fill"><b>文意選填</b><span>一篇短文 10 個空格、10 個選項，每個字只用一次，跟學測文意選填一樣。全部填完再交卷看解析。共 ${FILL.length} 篇。</span></button></li>` : ""}
         <li><button type="button" class="mode" data-drill="go" data-mode="weak"${nWeak ? "" : " disabled"}><b>錯字複習</b><span>${nWeak ? `把答錯過的 ${nWeak} 個字裡，錯最多次的再考一輪。` : "還沒有答錯過的字。"}</span></button></li>
@@ -1216,7 +1253,7 @@ function renderDrill(){
         ${answered && ok ? SEAL() : ""}
       </article>
       ${answered ? `<p class="feedback ${ok ? "ok" : "no"}" aria-live="polite">${ok ? "拼對了。" : drill.typed ? `你拼的是「${esc(drill.typed)}」，正確是「${esc(w.k)}」。` : `正確是「${esc(w.k)}」，下次再挑戰。`}</p>${nextBtn}`
-        : `<div class="spell"><label class="vh" for="spellIn">輸入英文拼字</label><input id="spellIn" class="field" lang="en" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+        : `<div class="spell"><label class="vh" for="spellIn">輸入${L2()}拼字</label><input id="spellIn" class="field" lang="en" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
            <button class="btn skip" type="button" data-drill="skip">跳過</button><button class="btn primary" type="button" data-drill="check">確定</button></div>
            <p class="hint">不會的話按「跳過」看答案。</p>`}`;
     hookImgs(v); return;
@@ -1272,6 +1309,9 @@ function renderLib(){
   $("#libMore").innerHTML = rest > 0 ? `<p class="hint">共 ${items.length} 個字，目前顯示 ${ui.limit} 個。用搜尋可以直接找到某個字。</p>
     <button class="btn small" type="button" data-lib="more">再顯示 ${Math.min(LIB_PAGE, rest)} 個</button>` : "";
   $("#listEmpty").hidden = items.length > 0;
+  $("#q").placeholder = `搜尋${L2()}或中文`;
+  const src = curPack().source, sb = $("#libSrc");
+  if (sb){ sb.hidden = !src; sb.textContent = src ? "資料來源：" + src : ""; }
 }
 function refocusRow(id, sel){ const el = document.querySelector(`[data-lib="${sel}"][data-id="${CSS.escape(id)}"]`); if (el && kbd) el.focus({ preventScroll:true }); }
 function mineEntry(id){ return state.custom.find(c => c.w.toLowerCase() === id); }
@@ -1426,70 +1466,157 @@ function renderLog(){
     ${recent ? `<ul class="recent">${recent}</ul>` : `<p class="hint">做完一次功課或練習，這裡就會有紀錄。</p>`}`;
 }
 
-/* ---------- cloud sync (optional, Firebase) ---------- */
-let fb = null, cloudTimer = null, cloudState = "off";
-function syncNote(t){ cloudState = t; const el = $("#syncNote"); if (el) renderSync(); }
-function newCode(){ const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; const r = new Uint32Array(16); crypto.getRandomValues(r); r.forEach(x => s += a[x % a.length]); return s.match(/.{4}/g).join("-"); }
-function loadScript(src){ return new Promise((ok, no) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); }); }
-async function cloudInit(){
-  if (!FB_CFG || !FB_CFG.apiKey) return;
-  try {
-    const V = "10.12.2", base = `https://www.gstatic.com/firebasejs/${V}/`;
-    await loadScript(base + "firebase-app-compat.js");
-    await Promise.all([loadScript(base + "firebase-auth-compat.js"), loadScript(base + "firebase-firestore-compat.js")]);
-    firebase.initializeApp(FB_CFG);
-    await firebase.auth().signInAnonymously();
-    fb = firebase.firestore();
-    if (!state.sync.code){ state.sync.code = newCode(); }
-    const snap = await fb.collection("sync").doc(state.sync.code).get();
-    if (snap.exists){
-      const d = snap.data();
-      if ((d.updatedAt || 0) > (state.updatedAt || 0)){ adoptRemote(d.data, state.sync.code); }
-    }
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
-    syncNote("on"); cloudSave(true);
-  } catch (e) { fb = null; syncNote("fail"); }
+/* ---------- account sync (optional, Supabase: UID + password) ---------- */
+const ACCT_KEY = "gsat-jinbang-acct";
+let SB = null, cloudTimer = null, cloudState = "off", cloudBusy = false, cloudAgain = false;
+function loadAcct(){ try { const a = JSON.parse(localStorage.getItem(ACCT_KEY) || "null"); return a && a.uid && a.pass ? a : null; } catch (e) { return null; } }
+function saveAcct(a){ try { if (a) localStorage.setItem(ACCT_KEY, JSON.stringify(a)); else localStorage.removeItem(ACCT_KEY); } catch (e) {} }
+let acct = loadAcct();
+function syncNote(t){ cloudState = t; if ($("#syncNote") && !document.querySelector("#syncNote input:focus")) renderSync(); }
+function setSyncMsg(t){ const el = $("#syncMsg"); if (el) el.textContent = t; }
+async function rpc(fn, args){
+  const r = await fetch(`${SB.url.replace(/\/+$/, "")}/rest/v1/rpc/${fn}`, {
+    method:"POST", headers:Object.assign({ "Content-Type":"application/json", apikey:SB.anonKey }, /^eyJ/.test(SB.anonKey) ? { Authorization:`Bearer ${SB.anonKey}` } : {}), body:JSON.stringify(args) });
+  if (!r.ok) throw new Error("http " + r.status);
+  return r.json();
 }
-function adoptRemote(json, code){
-  const remote = normalize(JSON.parse(json));
-  remote.sync = { code };
-  state = remote; rebuild(); migrateRanks(); ensureToday(); sanitizeToday(); cur = null;
+const ERR = { bad_login:"UID 或密碼不對。", locked:"密碼錯太多次，這個帳號先鎖 15 分鐘，等一下再試。", short:"密碼至少要 6 個字。", big:"進度太大，雲端存不下，請改用備份檔。" };
+function cloudData(){ const s = Object.assign({}, state); delete s.sync; return s; }
+/* merge two progress records: per word keep the one answered more times */
+function mergeState(a, b){
+  a = normalize(a); b = normalize(b);
+  const nw = (b.updatedAt || 0) > (a.updatedAt || 0) ? b : a, od = nw === a ? b : a;
+  const out = JSON.parse(JSON.stringify(nw));
+  for (const [id, p] of Object.entries(od.prog)){
+    const q = out.prog[id];
+    if (!q || (p[2] || 0) > (q[2] || 0) || ((p[2] || 0) === (q[2] || 0) && (p[1] || 0) > (q[1] || 0))) out.prog[id] = p;
+  }
+  out.xp = Math.max(a.xp || 0, b.xp || 0);
+  out.best = Math.max(a.best || 0, b.best || 0);
+  if ((od.lastDay || 0) > (out.lastDay || 0)){ out.lastDay = od.lastDay; out.streak = od.streak; }
+  for (const [k, v] of Object.entries(od.history)) out.history[k] = Math.max(out.history[k] || 0, v || 0);
+  const lg = new Map(); [...od.log, ...out.log].forEach(e => { if (e && e.t) lg.set(e.t + ":" + e.m, e); });
+  out.log = [...lg.values()].sort((x, y) => x.t - y.t).slice(-600);
+  const cw = new Set(out.custom.map(c => String(c.w || "").toLowerCase()));
+  od.custom.forEach(c => { const k = String(c.w || "").toLowerCase(); if (k && !cw.has(k)){ cw.add(k); out.custom.push(c); } });
+  out.unlocks = Object.assign({}, od.unlocks, nw.unlocks);
+  out.packStart = Object.assign({}, od.packStart, nw.packStart);
+  out.exams = Object.assign({}, od.exams || {}, nw.exams || {});
+  ["seen", "pseen", "fseen"].forEach(k => { out.drills[k] = [...new Set([...(od.drills[k] || []), ...(out.drills[k] || [])])]; });
+  if (!out.notes && od.notes) out.notes = od.notes;
+  if (!out.hs && od.hs) out.hs = od.hs;
+  if (!out.placement && od.placement) out.placement = od.placement;
+  out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
+  return out;
+}
+async function adoptMerged(remote){
+  const sync = state.sync;
+  state = normalize(remote ? mergeState(state, remote) : state); state.sync = sync;
+  rebuild(); migrateRanks(); ensureToday(); sanitizeToday(); cur = null;
   try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  await loadUnlocked(); rebuild();
   applyTheme(); applySkin(); renderAll();
 }
-function cloudSave(now){
-  if (!fb || !state.sync.code) return;
-  clearTimeout(cloudTimer);
-  cloudTimer = setTimeout(async () => {
-    try {
-      const data = JSON.stringify(state);
-      if (data.length > 900000) { syncNote("big"); return; }
-      await fb.collection("sync").doc(state.sync.code).set({ data, updatedAt:state.updatedAt || Date.now(), name:(charObj() || {}).name || "" });
-      syncNote("on");
-    } catch (e) { syncNote("fail"); }
-  }, now ? 0 : 2500);
-}
-async function cloudLoad(code){
-  code = String(code || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(.{4})(?=.)/g, "$1-");
-  if (!fb){ $("#syncMsg").textContent = "雲端同步還沒設定好。"; return; }
-  if (code.length < 19){ $("#syncMsg").textContent = "同步碼是 16 個字母或數字（4 個一組）。"; return; }
+async function cloudInit(){
+  if (!SB || !acct) { syncNote("off"); return; }
+  syncNote("busy");
   try {
-    const snap = await fb.collection("sync").doc(code).get();
-    if (!snap.exists){ $("#syncMsg").textContent = "找不到這個同步碼，請再確認一次。"; return; }
-    adoptRemote(snap.data().data, code); save();
-    $("#syncMsg").textContent = `讀取完成：${Object.keys(state.prog).length} 個字的進度、${state.xp} 分。`;
-  } catch (e) { $("#syncMsg").textContent = "連不上雲端，等一下再試。"; }
+    const r = await rpc("vs_load", { p_uid:acct.uid, p_pass:acct.pass });
+    if (!r.ok){ syncNote(r.err === "bad_login" ? "badpass" : "fail"); return; }
+    if ((r.updated_at || 0) > (acct.base || 0) && r.data) await adoptMerged(r.data);
+    acct.base = r.updated_at || 0; saveAcct(acct);
+    syncNote("on"); cloudPush(true);
+  } catch (e) { syncNote("fail"); }
 }
+function cloudSave(){ cloudPush(false); }
+function cloudPush(now){
+  if (!SB || !acct || cloudState === "badpass") return;
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(doPush, now ? 0 : 2500);
+}
+async function doPush(retry){
+  if (cloudBusy){ cloudAgain = true; return; }
+  cloudBusy = true;
+  try {
+    const r = await rpc("vs_save", { p_uid:acct.uid, p_pass:acct.pass, p_data:cloudData(), p_updated:state.updatedAt || Date.now(), p_base:acct.base || 0 });
+    if (r.ok){ acct.base = r.updated_at; saveAcct(acct); syncNote("on"); }
+    else if (r.err === "stale" && !retry){
+      await adoptMerged(r.data); acct.base = r.updated_at; saveAcct(acct);
+      state.updatedAt = Date.now(); try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+      cloudBusy = false; return doPush(true);
+    }
+    else syncNote(r.err === "bad_login" ? "badpass" : r.err === "big" ? "big" : "fail");
+  } catch (e) { syncNote("fail"); }
+  cloudBusy = false;
+  if (cloudAgain){ cloudAgain = false; cloudPush(true); }
+}
+async function acctCreate(){
+  const p1 = $("#acctPass").value, p2 = $("#acctPass2").value;
+  if (p1.length < 6) return setSyncMsg(ERR.short);
+  if (p1 !== p2) return setSyncMsg("兩次輸入的密碼不一樣。");
+  setSyncMsg("建立中……");
+  try {
+    state.updatedAt = state.updatedAt || Date.now();
+    const r = await rpc("vs_register", { p_pass:p1, p_data:cloudData(), p_updated:state.updatedAt });
+    if (!r.ok) return setSyncMsg(ERR[r.err] || "建立失敗，等一下再試。");
+    acct = { uid:r.uid, pass:p1, base:r.updated_at }; saveAcct(acct);
+    syncNote("on"); setSyncMsg(`建立好了！你的 UID 是 ${r.uid}，請抄下來。`);
+  } catch (e) { setSyncMsg("連不上雲端，等一下再試。"); }
+}
+async function acctLogin(){
+  const uid = $("#acctUid").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""), pass = $("#acctLoginPass").value;
+  if (!uid || !pass) return setSyncMsg("UID 和密碼都要填。");
+  setSyncMsg("登入中……");
+  try {
+    const r = await rpc("vs_load", { p_uid:uid, p_pass:pass });
+    if (!r.ok) return setSyncMsg(ERR[r.err] || "登入失敗，等一下再試。");
+    acct = { uid, pass, base:r.updated_at || 0 }; saveAcct(acct);
+    await adoptMerged(r.data || null);
+    save(); cloudPush(true); syncNote("on");
+    setSyncMsg(`登入了。這台的進度已經和雲端合併：${Object.keys(state.prog).length} 個字、${state.xp} 分。`);
+  } catch (e) { setSyncMsg("連不上雲端，等一下再試。"); }
+}
+async function acctPasswd(){
+  const o = $("#acctOld").value, n = $("#acctNew").value;
+  if (n.length < 6) return setSyncMsg(ERR.short);
+  try {
+    const r = await rpc("vs_passwd", { p_uid:acct.uid, p_old:o, p_new:n });
+    if (!r.ok) return setSyncMsg(ERR[r.err] || "改密碼失敗。");
+    acct.pass = n; saveAcct(acct); syncNote("on"); setSyncMsg("密碼改好了。其他裝置要用新密碼重新登入。");
+  } catch (e) { setSyncMsg("連不上雲端，等一下再試。"); }
+}
+function acctLogout(){ acct = null; saveAcct(null); clearTimeout(cloudTimer); syncNote("off"); setSyncMsg("已登出。這台的進度還在，只是不再同步。"); }
 function renderSync(){
   const el = $("#syncNote"); if (!el) return;
-  if (!FB_CFG || !FB_CFG.apiKey){ el.innerHTML = `<p class="hint">這個網站還沒開雲端同步，進度只存在這支手機。可以用下方的備份檔搬家。</p>`; return; }
-  const msg = { on:"已開啟。每次作答都會自動存到雲端。", fail:"連不上雲端，進度先存在手機裡，連上後會再同步。", big:"進度太大，雲端存不下，請用備份檔。", off:"正在連線……" }[cloudState] || "";
-  el.innerHTML = `<p class="hint">${msg}</p>
-    ${state.sync.code ? `<p class="code"><span>你的同步碼</span><b lang="en">${esc(state.sync.code)}</b><button class="btn small" type="button" id="copyCode">複製</button></p>
-    <p class="hint">換手機、或從主畫面圖示改開時，在新的地方輸入這組碼，就能接著背。同步碼等於鑰匙，不要給別人。</p>` : ""}
-    <div class="spell"><label class="vh" for="codeIn">輸入同步碼</label><input id="codeIn" class="field" lang="en" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <button class="btn small" type="button" id="codeLoad">讀取</button></div>
-    <p class="hint" id="syncMsg" aria-live="polite"></p>`;
+  if (!SB){ el.innerHTML = `<p class="hint">這個網站還沒開帳號同步，進度只存在這支手機。可以用下方的備份檔搬家。</p>`; return; }
+  const msg = $("#syncMsg") ? $("#syncMsg").textContent : "";
+  if (!acct){
+    el.innerHTML = `<p class="hint">登入後，進度會自動存到雲端。換手機或和別的裝置共用時，輸入同一組 UID 和密碼就能接著背。不登入也能用，進度只存在這支手機。</p>
+      <details class="acct"><summary>建立新帳號</summary>
+        <label>自訂密碼（至少 6 個字）<input id="acctPass" class="field" type="password" autocomplete="new-password"></label>
+        <label>再輸入一次<input id="acctPass2" class="field" type="password" autocomplete="new-password"></label>
+        <p class="actions row"><button class="btn small primary" type="button" id="acctCreate">建立並上傳這台的進度</button></p>
+      </details>
+      <details class="acct"><summary>用已有的 UID 登入</summary>
+        <label>UID<input id="acctUid" class="field" lang="en" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="例如 K7QM2XPA"></label>
+        <label>密碼<input id="acctLoginPass" class="field" type="password" autocomplete="current-password"></label>
+        <p class="actions row"><button class="btn small primary" type="button" id="acctLogin">登入</button></p>
+        <p class="hint">這台已經背過的進度會和雲端合併，不會被蓋掉。</p>
+      </details>
+      <p class="hint" id="syncMsg" aria-live="polite">${esc(msg)}</p>`;
+    return;
+  }
+  const st = { on:"已同步。每次作答都會自動存到雲端。", busy:"同步中……", fail:"連不上雲端，進度先存在手機裡，連上後會再同步。", big:ERR.big, badpass:"密碼不對了（可能在別台改過密碼），請登出後用新密碼重新登入。", off:"" }[cloudState] || "";
+  el.innerHTML = `<p class="code"><span>你的 UID</span><b lang="en">${esc(acct.uid)}</b><button class="btn small" type="button" id="copyUid">複製</button></p>
+    <p class="hint">${st}</p>
+    <p class="hint">在別支手機或電腦輸入這組 UID 和密碼，就能共用同一份進度。UID 和密碼等於鑰匙，只給要共用的人。</p>
+    <p class="actions row"><button class="btn small" type="button" id="acctSyncNow">立刻同步</button><button class="btn small" type="button" id="acctLogout">登出</button></p>
+    <details class="acct"><summary>改密碼</summary>
+      <label>舊密碼<input id="acctOld" class="field" type="password" autocomplete="current-password"></label>
+      <label>新密碼（至少 6 個字）<input id="acctNew" class="field" type="password" autocomplete="new-password"></label>
+      <p class="actions row"><button class="btn small" type="button" id="acctPasswd">改密碼</button></p>
+    </details>
+    <p class="hint" id="syncMsg" aria-live="polite">${esc(msg)}</p>`;
 }
 
 /* ---------- settings ---------- */
@@ -1503,6 +1630,9 @@ function renderSet(){
   $("#sPack").innerHTML = unlocked.map(p => `<button type="button" data-v="${esc(p.id)}" aria-pressed="${!hsOn() && p.id === curPackId()}">${esc(p.name)}</button>`).join("") + (hsU ? `<button type="button" data-v="hs" aria-pressed="${hsOn()}">同等學力</button>` : "");
   $("#sPack").hidden = unlocked.length + (hsU ? 1 : 0) < 2;
   $("#startGroup").hidden = !isGsat();
+  { const ex = examOf(), on = document.activeElement && document.activeElement.closest && document.activeElement.closest("#examGroup");
+    $("#examFor").textContent = `「${curPack().name}」字庫的考試，會顯示在最上面的倒數，每天新字數的建議也照這天算。每個字庫可以設不同的考試。`;
+    if (!on){ $("#examName").value = ex ? ex.name : ""; $("#examDate").value = ex ? ex.date : ""; } }
   const ps = $("#packStart"), PLs = packLevels();
   ps.hidden = isGsat() || PLs.length < 2;
   if (!ps.hidden) ps.innerHTML = `<label>從哪裡開始抽新字 <select id="packStartSel" class="field sel">${PLs.map(lv => `<option value="${lv}"${lv === startLv() ? " selected" : ""}>${esc(lvName(lv))}</option>`).join("")}</select></label><p class="hint">照順序往後抽；前面還沒學的字，會等後面都抽完才回頭。</p>`;
@@ -1512,7 +1642,9 @@ function renderSet(){
   setPressed("#sTheme", s.theme);
   const pl = state.placement;
   $("#startHint").textContent = (pl && pl.scores ? `程度測驗建議第 ${pl.rec} 級。` : "") + `新字會先從第 ${s.startLv} 級抽，抽完再往上一級；比它低的級數最後才抽。`;
-  $("#dailyHint").textContent = !isGsat() ? `「${curPack().name}」還有 ${remainingFrom(1)} 個沒學過的字。今天還沒按開始的話立刻生效，否則從明天起。` : `從第 ${s.startLv} 級開始還有 ${remainingFrom(s.startLv)} 個沒學過的字，離學測 ${daysLeft()} 天。` + paceText(s.daily, s.startLv) + " 今天還沒按開始的話立刻生效，否則從明天起。";
+  { const R = isGsat() ? remainingFrom(s.startLv) : remainingFrom(1), d = daysLeft(), hasEx = !!examOf() && d > 0;
+    $("#dailyHint").textContent = (!isGsat() ? `「${curPack().name}」還有 ${R} 個沒學過的字` + (hasEx ? `，離${exName()} ${d} 天，要背完每天大約 ${Math.ceil(R / Math.max(1, d - 3))} 個。` : "。")
+      : `從第 ${s.startLv} 級開始還有 ${R} 個沒學過的字` + (hasEx ? `，離${exName()} ${d} 天。` + paceText(s.daily, s.startLv) : "。")) + " 今天還沒按開始的話立刻生效，否則從明天起。"; }
   const cs = CHARS.characters || [];
   const curC = charObj();
   $("#charGroup").hidden = cs.length < 2;
@@ -1582,7 +1714,7 @@ function lastBackupText(){
   return `上次備份：${d.getMonth() + 1}/${d.getDate()}（${n ? n + " 天前" : "今天"}）。每 7 天會在「今日」提醒一次。`;
 }
 function backupDue(){
-  if (cloudState === "on" && state.sync && state.sync.code) return 0;
+  if (cloudState === "on" && acct) return 0;
   if (Object.keys(state.prog).length < 10) return 0;
   if (state.backupSnooze === dayNum()) return 0;
   if (!state.backupAt) return -1;
@@ -2012,6 +2144,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const act = b.dataset.act, T = state.today;
   if (act === "say"){ say(b.dataset.w); return; }
+  if (act === "playex"){ playUrl(b.dataset.u); return; }
   if (act === "start"){ T.started = true; T.t0 = Date.now(); T.wrong = []; enterQuizIfNeeded(); save(); renderHeader(); renderToday(); focusMain(); return; }
   if (act === "learned"){ T.learned++; enterQuizIfNeeded(); save(); renderHeader(); renderToday(); focusMain(); return; }
   if (act === "pick"){ answer(b.dataset.id); return; }
@@ -2131,13 +2264,25 @@ $("#view-set").addEventListener("click", e => {
     if (g === "sTheme"){ state.settings.theme = v; applyTheme(); }
     save(); renderSet(); return;
   }
+  if (e.target.closest("#examSave")){
+    const name = $("#examName").value.trim().slice(0, 12), date = $("#examDate").value;
+    if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(date)){ $("#examMsg").textContent = "考試名稱和日期都要填。"; return; }
+    state.exams[curPackId()] = { name, date }; save(); renderAll(); renderSet();
+    const l = examLeft(); $("#examMsg").textContent = l > 0 ? `存好了，離${name}還有 ${l} 天。` : l === 0 ? `存好了，今天就是${name}！` : "存好了。這個日期已經過了，倒數會顯示「結束了」。";
+    return;
+  }
+  if (e.target.closest("#examClear")){ state.exams[curPackId()] = { name:"", date:"" }; save(); renderAll(); renderSet(); $("#examMsg").textContent = "這個字庫不倒數了。想恢復的話重新填好按儲存。"; return; }
   if (e.target.closest("#retestBtn")){ showTab("today"); startTest(); renderToday(); focusMain(); return; }
   if (e.target.closest("#exportBtn")){ exportBackup(); return; }
   if (e.target.closest("#copyBackup")){ copyBackup(); return; }
   if (e.target.closest("#restoreBtn")){ restoreFromText(); return; }
   if (e.target.closest("#redeemBtn")){ redeem($("#redeemIn").value); return; }
-  if (e.target.closest("#copyCode")){ try { navigator.clipboard.writeText(state.sync.code).then(() => { $("#syncMsg").textContent = "已複製。"; }, () => { $("#syncMsg").textContent = "請手動抄下這組碼。"; }); } catch (err) { $("#syncMsg").textContent = "請手動抄下這組碼。"; } return; }
-  if (e.target.closest("#codeLoad")){ cloudLoad($("#codeIn").value); return; }
+  if (e.target.closest("#copyUid")){ try { navigator.clipboard.writeText(acct.uid).then(() => setSyncMsg("已複製。"), () => setSyncMsg("請手動抄下這組 UID。")); } catch (err) { setSyncMsg("請手動抄下這組 UID。"); } return; }
+  if (e.target.closest("#acctCreate")){ acctCreate(); return; }
+  if (e.target.closest("#acctLogin")){ acctLogin(); return; }
+  if (e.target.closest("#acctPasswd")){ acctPasswd(); return; }
+  if (e.target.closest("#acctLogout")){ acctLogout(); return; }
+  if (e.target.closest("#acctSyncNow")){ setSyncMsg(""); cloudInit(); return; }
   if (e.target.closest("#resetBtn")){
     if (!resetArmed){
       resetArmed = true; renderSet();
@@ -2174,7 +2319,7 @@ async function load(){
       getJSON("config.json").catch(() => null),
       getJSON("passages.json").catch(() => []),
       getJSON("fill.json").catch(() => [])
-    ]).then(r => { const cfg = r[3]; CFG = cfg; PASS = Array.isArray(r[4]) ? r[4] : []; FILL = Array.isArray(r[5]) ? r[5] : []; if (cfg && cfg.firebase && cfg.firebase.apiKey) FB_CFG = cfg.firebase; if (cfg && Array.isArray(cfg.rankXp) && cfg.rankXp.length) RANK_XP = cfg.rankXp.map(x => Math.max(0, +x || 0)).sort((a, b) => a - b); if (cfg && Array.isArray(cfg.ranks) && cfg.ranks.length){
+    ]).then(r => { const cfg = r[3]; CFG = cfg; PASS = Array.isArray(r[4]) ? r[4] : []; FILL = Array.isArray(r[5]) ? r[5] : []; if (cfg && cfg.supabase && cfg.supabase.url && cfg.supabase.anonKey) SB = cfg.supabase; if (cfg && Array.isArray(cfg.rankXp) && cfg.rankXp.length) RANK_XP = cfg.rankXp.map(x => Math.max(0, +x || 0)).sort((a, b) => a - b); if (cfg && Array.isArray(cfg.ranks) && cfg.ranks.length){
         const rk = cfg.ranks.filter(x => x && x.name).map(x => [String(x.name), Math.max(0, +x.xp || 0)]).sort((a, b) => a[1] - b[1]);
         if (rk.length){ rk[0][1] = 0; BASE_RANKS = rk; } } return r; });
     EX = ex || {};

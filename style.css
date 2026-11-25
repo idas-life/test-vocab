@@ -561,3 +561,14 @@ textarea.field{width:100%;font:inherit;line-height:1.5;resize:vertical;min-heigh
 .ntbody .dtab td,.ntbody .dtab th{white-space:normal;text-align:left;min-width:4.5em}
 .ntbody .dtab td:first-child{min-width:5.5em}
 .ntbody li{overflow-wrap:anywhere}
+
+.say.mini{padding:2px 6px;min-height:0;vertical-align:middle;margin-left:4px}
+.libsrc{margin-top:16px;font-size:12px;opacity:.75}
+.examrow{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem}
+.examrow label,.acct label{display:flex;flex-direction:column;gap:.3rem;font-size:.9rem;color:var(--ink-soft)}
+.examrow .field{min-width:0;width:100%}
+.acct{margin-top:.8rem;border:2px solid var(--line, rgba(0,0,0,.08));border-radius:14px;padding:.6rem .8rem;background:var(--card)}
+.acct summary{cursor:pointer;font-weight:700;-webkit-tap-highlight-color:transparent}
+.acct label{margin-top:.6rem}
+.cdex{white-space:nowrap}
+.acct .field{width:100%;min-width:0;box-sizing:border-box}

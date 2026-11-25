@@ -12,11 +12,12 @@
 | `words.json` | 單字資料（見下方格式） |
 | `examples.json` | 詞彙題用的例句（目前 383 句，第 3–5 級） |
 | `chars.json` | 陪讀角色設定 |
-| `config.json` | 稱號、雲端同步設定 |
+| `config.json` | 稱號、字庫清單、帳號同步（Supabase）設定 |
 | `passages.json` | 克漏字短文（目前 30 篇、150 格） |
 | `fill.json` | 文意選填短文（目前 12 篇、120 格，每篇 10 格 10 個選項） |
 | `packs/` | 加密過的額外字庫（要兌換碼） |
 | `tools/lock-pack.mjs` | 把字庫加密成兌換碼字庫的小工具 |
+| `tools/supabase.sql` | 帳號同步要在 Supabase 跑的 SQL |
 | `tools/shrink-images.py` | 把角色圖縮成網站用的小尺寸 |
 | `manifest.webmanifest`、`icon-*.png` | 加入主畫面用的圖示 |
 | `img/` | 放角色 Q 版圖 |
@@ -90,45 +91,34 @@ img/
 
 ## 進度存在哪裡
 
-- 每支手機的瀏覽器各自存，每答一題自動存，不用登入。
+- 每支手機的瀏覽器各自存，每答一題自動存，不用登入。登入帳號（見下方「帳號同步」）的話，也會同步到雲端。
 - 網站內的「紀錄」分頁看得到：每天答題數、各級進度、克漏字題型正確率、最常錯的字、最近紀錄。
 - iPhone 請「加入主畫面」再用：Safari 會清掉超過 7 天沒打開的網站資料，主畫面版比較不會。主畫面版和 Safari 版的資料是分開的。
 - 「設定 → 怎麼保存進度」有 iPhone 和 Android 的圖文步驟，打開設定時會自動展開對應手機的那一份。
 - 「設定 → 備份進度」可以「複製備份文字」（貼到 LINE Keep 或備忘錄存著）或下載備份檔；「還原進度」貼回去或讀檔就能接著背。iPhone 建議用備份文字，比下載檔案方便。
 
-## 開啟雲端同步（選用，Firebase）
+## 帳號同步（選用，Supabase）
 
-開了之後，每個人會自動拿到一組「同步碼」，進度會自動存到雲端；換手機時輸入同步碼就能接回去。不用登入，每個人互不干擾。
+開了之後，設定頁的「雲端同步」可以建立帳號：系統給一組 8 碼的 UID，密碼自己設。在別支手機或電腦輸入同一組 UID 和密碼，就能共用同一份進度。不登入也能照常用，進度只存在那支手機。
 
-1. 到 Firebase console 建一個專案 → 新增網頁應用程式，複製它給的 `firebaseConfig`。
-2. Authentication → Sign-in method → 開啟「匿名」。
-3. Authentication → Settings → 已授權網域，加上 `你的帳號.github.io`。
-4. Firestore Database → 建立資料庫（正式版模式）→ 規則貼上：
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /sync/{code} {
-      allow get, create, update: if request.auth != null && code.size() == 19;
-      allow list, delete: if false;
-    }
-  }
-}
-```
-
-5. 把 `firebaseConfig` 貼進 `config.json`：
+1. 到 Supabase 建一個專案。
+2. 左邊 SQL Editor → New query → 把 `tools/supabase.sql` 整份貼上 → Run（重跑也沒關係）。
+3. Project Settings → API，複製 Project URL 和 `anon` `public` key，貼進 `config.json`：
 
 ```json
-"firebase": {
-  "apiKey": "…",
-  "authDomain": "…",
-  "projectId": "…",
-  "appId": "…"
+"supabase": {
+  "url": "https://xxxx.supabase.co",
+  "anonKey": "eyJ…"
 }
 ```
 
-同步碼就是鑰匙，知道碼的人就能讀寫那份進度，所以請大家不要把自己的碼貼出去。
+說明：
+
+- anon key 本來就是公開的。資料表開了 RLS、沒有任何 policy，網頁不能直接讀寫，只能透過 `vs_register`、`vs_load`、`vs_save`、`vs_passwd` 這幾個函式，而且每次都要對上 UID 和密碼。
+- 密碼用 bcrypt 存，後台也看不到原文。同一個 UID 連錯 10 次會鎖 15 分鐘。
+- 密碼只存在使用者自己的瀏覽器（`localStorage` 的 `gsat-jinbang-acct`），不會出現在備份檔或上傳的進度裡。
+- 兩台同時用時，每個字保留作答次數比較多的那份紀錄；分數取兩邊比較高的，所以兩台分開賺的分數不會相加。
+- 在後台 Table Editor 看得到 `vocab_sync` 表（UID、進度、最後更新時間），要刪帳號就刪那一列。
 
 ## 兌換碼解鎖其他字庫（托福、雅思、GRE……）
 
@@ -176,6 +166,10 @@ service cloud.firestore {
 - 這個字庫不用兌換碼，大家都看得到。因為 CC BY-SA 不允許用加密等技術限制別人取用，所以沒有上鎖。
 - 進度和學測版分開記（`idPrefix: "toeic:"`），同一個字在多益裡會重新背一次。
 - 改中文的方法和 words.json 一樣：打開 `packs/toeic.json`，找到那個字改 `"m"` 裡的中文。
+
+## 考試倒數
+
+設定頁的「考試倒數」可以自己填考試名稱和日期，每個字庫分開記（例如學測字庫倒數學測、托福字庫倒數托福）。學測字庫沒改過的話，預設是 116 學測（2027/1/22）；按「不要倒數」就不顯示。每天新字數的建議也會照這個日期算。
 
 ## 授權與來源
 
