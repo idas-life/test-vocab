@@ -1039,7 +1039,7 @@ function drillNext(){
   else setupDrillItem();
   renderDrill(); focusMain();
 }
-const MODE_NAME = { tfctw:"托福補字", tfread:"托福閱讀", cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", fill:"文意選填", daily:"每日功課", test:"程度測驗" };
+const MODE_NAME = { tfctw:"托福補字", tfread:"托福閱讀", tfmock:"托福模擬考", cloze:"詞彙題", spell:"拼字", weak:"錯字複習", passage:"克漏字", fill:"文意選填", daily:"每日功課", test:"程度測驗" };
 const TYPE_NAME = { vocab:"詞彙", phrase:"片語", conj:"轉承詞", gram:"文法" };
 
 /* ---------- 克漏字 ---------- */
@@ -1950,6 +1950,8 @@ function tfPrep(data){
     if (it.type === "ctw"){ it.blanks = []; it.text.replace(/([A-Za-z]+)\{([A-Za-z]+)\}/g, (m, pre, rest) => { it.blanks.push({ pre, rest }); return m; }); }
     TF.byId.set(it.id, it);
   }));
+  const all = (TF.sets || []).reduce((a, s) => a.concat(s.items || []), []);
+  TF.allSet = { id:"all", short:"全部題庫", title:"全部題庫：所有套的題目照題型放在一起", items:all };
 }
 function tfState(){
   if (!state.tf || typeof state.tf !== "object") state.tf = {};
@@ -1958,7 +1960,7 @@ function tfState(){
   if (!t.ctw || typeof t.ctw !== "object") t.ctw = {};
   return t;
 }
-function tfSet(){ if (!TF || !TF.sets || !TF.sets.length) return null; const id = tfState().set; return TF.sets.find(s => s.id === id) || TF.sets[TF.sets.length - 1]; }
+function tfSet(){ if (!TF || !TF.sets || !TF.sets.length) return null; const id = tfState().set || "all"; if (id === "all" && TF.sets.length > 1) return TF.allSet; return TF.sets.find(s => s.id === id) || TF.sets[TF.sets.length - 1]; }
 function tfItems(sec, set){ const s = set || tfSet(); return s ? s.items.filter(it => !sec || it.sec === sec) : []; }
 function tfAll(sec){ return TF && TF.sets ? TF.sets.reduce((a, s) => a.concat(tfItems(sec, s)), []) : []; }
 function tfScore(it){
@@ -1978,7 +1980,7 @@ function tfBadge(it){
   return `答對 ${s.r}／${s.n}`;
 }
 function tfOpen(id){ const it = TF.byId.get(id); if (!it) return; tfv.page = "item"; tfv.item = id; tfv.sec = it.sec; renderTf(); window.scrollTo(0, 0); }
-function tfNextId(it){ const L = tfItems(it.sec, it.set), i = L.indexOf(it); return L[i + 1] ? L[i + 1].id : null; }
+function tfNextId(it){ let L = tfItems(it.sec); if (!L.includes(it)) L = tfItems(it.sec, it.set); const i = L.indexOf(it); return L[i + 1] ? L[i + 1].id : null; }
 function tfCtwHtml(it, done, vals){
   let i = 0;
   return it.text.replace(/([A-Za-z]+)\{([A-Za-z]+)\}/g, (m, pre, rest) => {
@@ -1992,6 +1994,8 @@ function renderTf(){
   const v = $("#view-tf");
   if (!TF){ v.innerHTML = `<p class="lede">還沒解鎖托福真題。到「設定 → 字庫」輸入兌換碼。</p>`; return; }
   const t = tfState(), set = tfSet();
+  if (tfv.page !== "mock") tfTimerStop();
+  if (tfv.page === "mock"){ renderMock(); return; }
   if (tfv.page === "home"){
     setMood("idle", "tf-home");
     const secs = ["ctw", "dl", "ap"].map(sec => {
@@ -2003,10 +2007,12 @@ function renderTf(){
     }).join("");
     const pk = PACKS.find(p => p.id === "toeflcn"), nW = (PACK_WORDS.toeflcn || []).length;
     v.innerHTML = buddyHtml("") + `<p class="step"><button type="button" class="linkbtn" data-tab-go="drill">← 練習</button></p>
-      <h2>托福真題・閱讀</h2>
-      ${TF.sets.length > 1 ? `<div class="seg tfsets" role="group" aria-label="選擇哪一套">${TF.sets.map(s => { const L = tfItems("", s), done = L.filter(it => { const x = tfScore(it); return x && x.part == null; }).length;
+      <h2>托福題庫・閱讀</h2>
+      <div class="card tfmockcard"><p><b>模擬考</b>：照新制閱讀的結構，從題庫各題型抽題，分 Module 1、Module 2，考完才對答案。${t.mock && !t.mock.done ? "你有一份還沒交卷的模擬考。" : ""}</p>
+        <div class="actions row"><button type="button" class="btn primary" data-tf="mock">${t.mock && !t.mock.done ? "繼續模擬考" : "開始模擬考"}</button>${(t.mocks || []).length ? `<small class="hint">已考 ${(t.mocks || []).length} 次</small>` : ""}</div></div>
+      ${TF.sets.length > 1 ? `<div class="seg tfsets" role="group" aria-label="選擇哪一套">${[TF.allSet].concat(TF.sets).map(s => { const L = tfItems("", s), done = L.filter(it => { const x = tfScore(it); return x && x.part == null; }).length;
         return `<button type="button" data-tf="set" data-v="${esc(s.id)}" aria-pressed="${s === set}">${esc(s.short || s.title)}<small>${done}／${L.length} 篇</small></button>`; }).join("")}</div>` : ""}
-      <p class="hint">${esc(set.title)}。答案依原檔的參考答案；原檔沒有附解析。</p>
+      <p class="hint">${esc(set.title)}。${set.id === "all" ? "真題的答案依原檔的參考答案。" : /^practice/.test(set.id) ? "這套是原創練習題，題型和主題方向照真題設計。" : "答案依原檔的參考答案；原檔沒有附解析。"}</p>
       ${nW && pk ? `<div class="actions"><button type="button" class="btn" data-tf="words">${curPackId() === "toeflcn" ? "正在背" : "改背"}托福真題生字（${nW} 個${TF.sets.length > 1 ? "，各套合在一起" : ""}）</button></div>` : ""}
       ${secs}
       <p class="hint">這是私人題庫，只有輸入兌換碼的人看得到，請不要轉傳截圖或內容。</p>`;
@@ -2043,7 +2049,8 @@ function renderTf(){
 }
 function tfClick(b){
   const a = b.dataset.tf, val = b.dataset.v, t = tfState();
-  if (a === "home"){ tfv.page = "home"; renderTf(); window.scrollTo(0, 0); }
+  if (a.startsWith("m") && mockClick(a, val, b)) return;
+  if (a === "home"){ mockHarvest(); save(); tfv.page = "home"; tfv.quitArm = false; renderTf(); window.scrollTo(0, 0); }
   else if (a === "open") tfOpen(val);
   else if (a === "set"){ t.set = val; save(); renderTf(); }
   else if (a === "words"){ if (PACK_WORDS.toeflcn){ switchPack("toeflcn"); showTab("today"); } }
@@ -2065,6 +2072,163 @@ function tfClick(b){
     save(); renderTf();
     const el = document.getElementById("tfq-" + qid); if (el) el.scrollIntoView({ block:"nearest" });
   }
+}
+
+/* ---------- 托福模擬考：從所有套的題目照題型抽題，兩個模組，考完才對答案 ---------- */
+// 每個模組抽幾篇。ETS 公布的閱讀是兩個模組、約 30 分鐘；之後官方題數有變，改這裡就好。
+const MOCK_PLAN = { 1:{ ctw:1, dl:2, ap:1 }, 2:{ ctw:1, dl:2, ap:1 } };
+const MOCK_MIN = 30;     // 整個閱讀的時間（分鐘）
+const MOCK_HARD = 0.6;   // Module 1 答對率到這個比例，Module 2 就抽較難的題目
+let tfTimer = null;
+function tfTimerStop(){ if (tfTimer){ clearInterval(tfTimer); tfTimer = null; } }
+function mockOrder(it, tiers){ const lv = it.lv || "m"; const i = tiers.indexOf(lv); return i < 0 ? tiers.length : i; }
+function mockPick(sec, n, tiers, used){
+  const t = tfState(), seen = t.seen || {};
+  return tfAll(sec).filter(it => !used.has(it.id))
+    .map(it => [(seen[it.id] || 0) * 10 + mockOrder(it, tiers) + Math.random() * 0.9, it])
+    .sort((a, b) => a[0] - b[0]).slice(0, n).map(x => x[1].id);
+}
+function mockBuild(mod, route){
+  const m = tfState().mock, used = new Set([].concat(m ? m.list[1] || [] : []));
+  const tiers = mod === 1 ? ["m", "e", "h"] : route === "h" ? ["h", "m", "e"] : ["e", "m", "h"];
+  const p = MOCK_PLAN[mod], ids = [];
+  ["ctw", "dl", "ap"].forEach(sec => { mockPick(sec, p[sec] || 0, tiers, used).forEach(id => { used.add(id); ids.push(id); }); });
+  return ids;
+}
+function mockItemScore(it, m){
+  if (it.type === "ctw"){ const v = m.ctw[it.id] || []; return { r:it.blanks.filter((b, i) => tfOkWord(b, v[i])).length, n:it.blanks.length, left:it.blanks.filter((b, i) => !String(v[i] || "").trim()).length }; }
+  return { r:it.qs.filter(q => m.ans[q.id] === q.a).length, n:it.qs.length, left:it.qs.filter(q => m.ans[q.id] == null).length };
+}
+function mockTally(m, ids){
+  const out = { r:0, n:0, left:0, sec:{} };
+  ids.forEach(id => { const it = TF.byId.get(id); if (!it) return; const s = mockItemScore(it, m);
+    out.r += s.r; out.n += s.n; out.left += s.left; const x = out.sec[it.sec] || (out.sec[it.sec] = [0, 0]); x[0] += s.r; x[1] += s.n; });
+  return out;
+}
+function mockHarvest(){
+  const m = tfState().mock; if (!m || m.done || tfv.page !== "mock") return;
+  const el = document.querySelector("#view-tf [data-mit]"); if (!el) return;
+  m.ctw[el.dataset.mit] = [...el.querySelectorAll(".ctwin")].map(i => i.value);
+}
+function mockLeft(m){ return Math.max(0, m.end - Date.now()); }
+function mockClock(ms){ const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function mockFinish(){
+  const t = tfState(), m = t.mock; if (!m || m.done) return;
+  mockHarvest();
+  const ids = (m.list[1] || []).concat(m.list[2] || []), T = mockTally(m, ids);
+  m.done = true; m.doneAt = Date.now();
+  t.seen = t.seen || {}; ids.forEach(id => { t.seen[id] = (t.seen[id] || 0) + 1; });
+  t.mocks = (t.mocks || []).concat([{ at:m.doneAt, r:T.r, n:T.n, sec:T.sec, route:m.route, min:Math.round((m.doneAt - m.start) / 60000) }]).slice(-30);
+  logRun("tfmock", T.n, T.r, (m.doneAt - m.start) / 1000);
+  tfTimerStop(); save();
+}
+function mockNextModule(){
+  const m = tfState().mock; mockHarvest();
+  const T = mockTally(m, m.list[1]);
+  m.route = T.n && T.r / T.n >= MOCK_HARD ? "h" : "e";
+  m.list[2] = mockBuild(2, m.route); m.mod = 2; m.idx = 0;
+  if (!m.list[2].length) mockFinish();
+  save();
+}
+function mockClick(a, val, b){
+  const t = tfState(); let m = t.mock;
+  if (a === "mock"){ tfv.page = "mock"; tfv.item = null; renderTf(); window.scrollTo(0, 0); return true; }
+  if (a === "mstart"){
+    t.mock = m = { start:Date.now(), end:Date.now() + MOCK_MIN * 60000, mod:1, route:null, list:{ 1:[], 2:[] }, idx:0, ans:{}, ctw:{}, done:false };
+    m.list[1] = mockBuild(1);
+    save(); renderTf(); window.scrollTo(0, 0); return true;
+  }
+  if (a === "mnew"){ t.mock = null; save(); renderTf(); window.scrollTo(0, 0); return true; }
+  if (!m) return false;
+  if (a === "mpick"){ if (m.done) return true; m.ans[b.dataset.q] = +val; save(); mockHarvest(); renderTf(); const el = document.getElementById("tfq-" + b.dataset.q); if (el) el.scrollIntoView({ block:"nearest" }); return true; }
+  if (a === "mprev" || a === "mnext"){ mockHarvest(); m.idx = Math.max(0, Math.min(m.list[m.mod].length - 1, m.idx + (a === "mnext" ? 1 : -1))); tfv.quitArm = false; save(); renderTf(); window.scrollTo(0, 0); return true; }
+  if (a === "mgo"){ mockHarvest(); m.idx = +val; save(); renderTf(); window.scrollTo(0, 0); return true; }
+  if (a === "mmod"){ mockNextModule(); renderTf(); window.scrollTo(0, 0); return true; }
+  if (a === "msubmit"){ mockFinish(); renderTf(); window.scrollTo(0, 0); return true; }
+  if (a === "mquit"){
+    if (!tfv.quitArm){ tfv.quitArm = true; renderTf(); return true; }
+    tfv.quitArm = false; t.mock = null; tfTimerStop(); save(); renderTf(); window.scrollTo(0, 0); return true;
+  }
+  return false;
+}
+function mockReadHtml(it, m, review){
+  const qs = it.qs.map((q, qi) => {
+    const p = m.ans[q.id];
+    return `<div class="tfq" id="tfq-${q.id}"><p class="tfstem"><b class="qn">${qi + 1}.</b><span${q.k === "ins" ? "" : ' lang="en"'}>${q.q}</span></p>
+      <ul class="opts">${q.o.map((o, i) => { let cls = "opt en";
+        if (review){ if (i === q.a) cls += " right"; else if (i === p) cls += " wrong"; } else if (i === p) cls += " picked";
+        return `<li><button type="button" class="${cls}" data-tf="mpick" data-q="${q.id}" data-v="${i}" aria-pressed="${i === p}"${review ? " disabled" : ""}><span class="key">${"ABCD"[i]}</span><span>${o}</span></button></li>`; }).join("")}</ul>
+      ${review ? `<p class="feedback ${p === q.a ? "ok" : "no"}">${p == null ? `沒作答，正確答案是 (${"ABCD"[q.a]})。` : p === q.a ? "答對了。" : `答錯了，正確答案是 (${"ABCD"[q.a]})。`}</p>` : ""}</div>`;
+  }).join("");
+  return `<article class="card tfp" lang="en">${it.paras.map(p => `<p>${p}</p>`).join("")}</article>${qs}`;
+}
+function mockItemHead(it){ return `<p class="hint">${TF_SEC[it.sec].zh}・<span lang="en">${TF_SEC[it.sec].name}</span>${it.task ? `・<span lang="en">${esc(it.task)}</span>` : ""}${it.set ? `・出自 ${esc(it.set.short || it.set.title)}` : ""}</p><h3 lang="en" class="tftitle">${esc(it.title)}</h3>`; }
+function renderMock(){
+  const v = $("#view-tf"), t = tfState(), m = t.mock;
+  const back = `<p class="step"><button type="button" class="linkbtn" data-tf="home">← 托福題庫</button></p>`;
+  const plan = p => ["ctw", "dl", "ap"].filter(s => p[s]).map(s => `${TF_SEC[s].zh} ${p[s]} 篇`).join("、");
+  const pct = (r, n) => n ? Math.round(r / n * 100) + "%" : "—";
+  if (!m){
+    tfTimerStop(); setMood("idle", "tf-mock");
+    const bank = ["ctw", "dl", "ap"].map(s => `${TF_SEC[s].zh} ${tfAll(s).length} 篇`).join("、");
+    const hist = (t.mocks || []).slice(-8).reverse().map(h => { const d = new Date(h.at);
+      return `<li>${d.getMonth() + 1}/${d.getDate()}：${h.r}／${h.n}（${pct(h.r, h.n)}）${["ctw", "dl", "ap"].filter(s => h.sec[s]).map(s => `・${TF_SEC[s].zh} ${pct(h.sec[s][0], h.sec[s][1])}`).join("")}${h.route ? `・Module 2 ${h.route === "h" ? "較難" : "較易"}` : ""}</li>`; }).join("");
+    v.innerHTML = buddyHtml("") + back + `<h2>托福閱讀模擬考</h2>
+      <p>照新制閱讀的結構出題：</p>
+      <ul><li><b>Module 1</b>：${plan(MOCK_PLAN[1])}，難度中等。</li>
+        <li><b>Module 2</b>：${plan(MOCK_PLAN[2])}。Module 1 答對 ${Math.round(MOCK_HARD * 100)}% 以上會抽較難的題目，否則抽較易的，跟正式考試一樣依表現調整。</li>
+        <li>全部 <b>${MOCK_MIN} 分鐘</b>，時間到自動交卷。考的時候不會對答案，交卷後一次看。</li></ul>
+      <p class="hint">題庫目前有：${bank}。沒考過的題目會優先出，考過的之後才會再出現。</p>
+      <div class="actions row"><button type="button" class="btn primary" data-tf="mstart">開始計時</button></div>
+      ${hist ? `<h3 class="sub">考過的紀錄</h3><ul class="tfhist">${hist}</ul>` : ""}`;
+    hookImgs(v); return;
+  }
+  if (m.done){
+    tfTimerStop();
+    const all = (m.list[1] || []).concat(m.list[2] || []), T = mockTally(m, all), ok = T.n && T.r / T.n >= 0.8;
+    setMood(ok ? "happy" : "idle", "tf-mockres-" + m.doneAt);
+    const secRows = ["ctw", "dl", "ap"].filter(s => T.sec[s]).map(s => `<li>${TF_SEC[s].zh}・<span lang="en">${TF_SEC[s].name}</span>：${T.sec[s][0]}／${T.sec[s][1]}（${pct(T.sec[s][0], T.sec[s][1])}）</li>`).join("");
+    const weak = ["ctw", "dl", "ap"].filter(s => T.sec[s] && T.sec[s][1]).sort((a, b) => T.sec[a][0] / T.sec[a][1] - T.sec[b][0] / T.sec[b][1])[0];
+    const rev = [1, 2].map(mod => (m.list[mod] || []).length ? `<h3 class="sub">Module ${mod}${mod === 2 && m.route ? `（${m.route === "h" ? "較難" : "較易"}路線）` : ""}</h3>` + m.list[mod].map(id => {
+      const it = TF.byId.get(id); if (!it) return ""; const s = mockItemScore(it, m);
+      const body = it.type === "ctw" ? `<article class="card tfp ctwp" lang="en">${tfCtwHtml(it, true, m.ctw[it.id] || [])}</article>` : mockReadHtml(it, m, true);
+      return `<details class="tfrev"><summary><span lang="en">${esc(it.title)}</span><small>${TF_SEC[it.sec].zh}・${s.r}／${s.n}</small></summary>${mockItemHead(it)}${body}</details>`;
+    }).join("") : "").join("");
+    v.innerHTML = buddyHtml(ok ? "bounce" : "") + back + `<h2>模擬考結果</h2>
+      <p class="feedback ${ok ? "ok" : "no"}">答對 ${T.r}／${T.n}（${pct(T.r, T.n)}），用了 ${Math.max(1, Math.round((m.doneAt - m.start) / 60000))} 分鐘${T.left ? `，有 ${T.left} 題沒作答` : ""}。</p>
+      <ul>${secRows}</ul>
+      ${weak ? `<p class="hint">這次最弱的是「${TF_SEC[weak].zh}」，可以回題庫選「全部題庫」專練這一型。</p>` : ""}
+      <p class="hint">百分比只是練習參考，不是官方 1–6 分換算。</p>
+      <div class="actions row"><button type="button" class="btn primary" data-tf="mnew">再考一次</button><button type="button" class="btn" data-tf="home">回題庫</button></div>
+      <h2 class="sub">逐題檢討</h2><p class="hint">點標題展開。</p>${rev}`;
+    hookImgs(v); return;
+  }
+  if (mockLeft(m) <= 0){ mockFinish(); renderMock(); return; }
+  const L = m.list[m.mod], it = TF.byId.get(L[m.idx]);
+  if (!it){ mockFinish(); renderMock(); return; }
+  const last = m.idx === L.length - 1, T = mockTally(m, L);
+  const dots = L.map((id, i) => { const x = TF.byId.get(id), s = x ? mockItemScore(x, m) : { left:0 };
+    return `<button type="button" data-tf="mgo" data-v="${i}" aria-pressed="${i === m.idx}" title="${x ? esc(TF_SEC[x.sec].zh) : ""}">${i + 1}${s.left ? "" : " ✓"}</button>`; }).join("");
+  const body = it.type === "ctw"
+    ? `<article class="card tfp ctwp" lang="en" data-mit="${esc(it.id)}">${tfCtwHtml(it, false, m.ctw[it.id] || [])}</article><p class="hint">補完缺少的字母，輸入完一格按 Enter 跳下一格。</p>`
+    : mockReadHtml(it, m, false);
+  const endBtn = last ? (m.mod === 1
+      ? `<button class="btn primary" type="button" data-tf="mmod">交出 Module 1，進入 Module 2</button>`
+      : `<button class="btn primary" type="button" data-tf="msubmit">交卷</button>`)
+    : `<button class="btn primary" type="button" data-tf="mnext">下一篇</button>`;
+  v.innerHTML = `<div class="tfmockbar"><span>Module ${m.mod}・第 ${m.idx + 1}／${L.length} 篇</span><span class="tfclock" id="tfClock" aria-label="剩餘時間">${mockClock(mockLeft(m))}</span></div>
+    <div class="seg tfdots" role="group" aria-label="跳到第幾篇">${dots}</div>
+    ${mockItemHead(it)}${body}
+    ${last && T.left ? `<p class="hint">這個模組還有 ${T.left} 題沒作答。${m.mod === 1 ? "交出後就不能回來改了。" : ""}</p>` : ""}
+    <div class="actions row">${m.idx > 0 ? `<button class="btn" type="button" data-tf="mprev">上一篇</button>` : ""}${endBtn}</div>
+    <p class="step"><button type="button" class="linkbtn" data-tf="mquit">${tfv.quitArm ? "再按一次就放棄這次模擬考（不會留下紀錄）" : "放棄這次模擬考"}</button>　<button type="button" class="linkbtn" data-tf="home">先離開（計時會繼續）</button></p>`;
+  hookImgs(v);
+  if (!tfTimer) tfTimer = setInterval(() => {
+    const mm = tfState().mock; if (!mm || mm.done || tfv.page !== "mock" || $("#view-tf").hidden){ tfTimerStop(); return; }
+    const left = mockLeft(mm), c = $("#tfClock");
+    if (left <= 0){ mockFinish(); renderTf(); window.scrollTo(0, 0); return; }
+    if (c){ c.textContent = mockClock(left); c.classList.toggle("low", left < 5 * 60000); }
+  }, 1000);
 }
 
 /* ---------- navigation ---------- */
@@ -2189,6 +2353,12 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("input", e => {
+  if (e.target.classList && e.target.classList.contains("ctwin") && tfv.page === "mock"){
+    mockHarvest();
+    const all = [...document.querySelectorAll("#view-tf .ctwin")];
+    if (e.target.value.length >= +e.target.maxLength && !e.isComposing){ const nx = all[all.indexOf(e.target) + 1]; if (nx) nx.focus({ preventScroll:false }); }
+    clearTimeout(tfv.st); tfv.st = setTimeout(save, 600); return;
+  }
   if (e.target.classList && e.target.classList.contains("ctwin") && tfv.item){
     const all = [...document.querySelectorAll("#view-tf .ctwin")], t = tfState();
     t.ctw[tfv.item] = { v:all.map(i => i.value), done:false };

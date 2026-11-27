@@ -572,3 +572,20 @@ textarea.field{width:100%;font:inherit;line-height:1.5;resize:vertical;min-heigh
 .acct label{margin-top:.6rem}
 .cdex{white-space:nowrap}
 .acct .field{width:100%;min-width:0;box-sizing:border-box}
+
+/* ---------- 托福模擬考 ---------- */
+.tfmockcard{margin:.8rem 0}
+.tfmockcard p{margin:0 0 .5rem}
+.tfmockbar{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;font-weight:600;margin:.4rem 0 .2rem}
+.tfclock{font-variant-numeric:tabular-nums;font-size:1.25rem;font-family:var(--en)}
+.tfclock.low{color:var(--seal)}
+.tfdots button{min-width:2.6rem}
+.opt.picked{border-color:var(--gold);background:var(--celadon-bg);box-shadow:0 0 0 2px var(--gold) inset}
+.tfhist{padding-left:1.2rem;margin:.4rem 0 0}
+.tfhist li{margin:.2rem 0}
+.tfrev{margin:.5rem 0;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.2rem .8rem}
+.tfrev summary{cursor:pointer;display:flex;justify-content:space-between;gap:.8rem;padding:.5rem 0;list-style:none}
+.tfrev summary::-webkit-details-marker{display:none}
+.tfrev summary span{font-family:var(--en)}
+.tfrev summary small{color:var(--ink-soft)}
+.tfrev[open] summary{border-bottom:1px solid var(--line);margin-bottom:.5rem}
